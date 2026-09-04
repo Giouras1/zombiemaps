@@ -2,217 +2,696 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Map Zombie Defense</title>
     <style>
+      :root {
+        color-scheme: dark;
+        --blood: #ed1c24;
+        --deep-blood: #710006;
+        --gold: #f5be3d;
+        --panel: rgba(5, 8, 10, 0.88);
+      }
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; }
       body {
         margin: 0;
         overflow: hidden;
-        background-color: #1a1a1a;
-        font-family: Arial, sans-serif;
+        background: #090c0e;
         color: #fff;
+        font-family: Arial, Helvetica, sans-serif;
       }
-      #debugUi {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 10;
-        min-width: 150px;
-        padding: 9px 11px;
-        border-left: 3px solid #e74c3c;
-        background: rgba(5, 8, 10, 0.78);
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
-        font: 700 14px/1.55 "Courier New", monospace;
-        letter-spacing: 0.04em;
+      button { font: inherit; }
+      canvas { display: block; }
+      .screen {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+      }
+      .screen[hidden], #gameHud[hidden], #roundUi[hidden] { display: none; }
+
+      #mainMenu {
+        background:
+          linear-gradient(rgba(3, 5, 6, 0.65), rgba(3, 5, 6, 0.92)),
+          repeating-linear-gradient(
+            90deg,
+            transparent 0,
+            transparent 79px,
+            rgba(237, 28, 36, 0.06) 80px
+          ),
+          radial-gradient(circle at center, #26343e 0, #0a0d0f 65%);
+      }
+      .menuContent { width: min(760px, 100%); }
+      .eyebrow {
+        margin: 0 0 12px;
+        color: #b8c0c5;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.42em;
+      }
+      .gameTitle {
+        margin: 0;
+        color: #f4f4f4;
+        font-size: clamp(54px, 10vw, 118px);
+        font-weight: 950;
+        letter-spacing: -0.075em;
+        line-height: 0.82;
+        text-transform: uppercase;
+        text-shadow: 0 5px 0 #111, 0 0 45px rgba(237, 28, 36, 0.25);
+      }
+      .gameTitle span {
+        display: block;
+        color: var(--blood);
+        -webkit-text-stroke: 2px var(--deep-blood);
+      }
+      #playButton {
+        min-width: 230px;
+        margin-top: 52px;
+        padding: 15px 34px;
+        border: 1px solid #ff5e64;
+        background: linear-gradient(#d51b22, #8f080d);
+        color: #fff;
+        box-shadow: 0 6px 0 #520004, 0 14px 35px rgba(0, 0, 0, 0.45);
+        cursor: pointer;
+        font-size: 21px;
+        font-weight: 900;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        transition: filter 140ms ease, transform 140ms ease;
+      }
+      #playButton:hover { filter: brightness(1.18); transform: translateY(-2px); }
+      #playButton:active { transform: translateY(2px); }
+      #playButton:focus-visible { outline: 3px solid #fff; outline-offset: 5px; }
+      .controlsHint {
+        margin: 34px 0 0;
+        color: #aab1b6;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      #loadingScreen { background: #050708; }
+      .loadingContent { width: min(650px, 86vw); }
+      .loadingTitle {
+        margin: 0 0 30px;
+        font-size: clamp(24px, 4vw, 42px);
+        font-weight: 900;
+        letter-spacing: 0.17em;
+        text-transform: uppercase;
+      }
+      .loadingTrack {
+        height: 20px;
+        overflow: hidden;
+        border: 2px solid #737b80;
+        background: #15191c;
+        box-shadow: inset 0 0 16px #000;
+      }
+      #loadingFill {
+        width: 0;
+        height: 100%;
+        background: linear-gradient(90deg, #85070c, var(--blood), #ff5f65);
+        box-shadow: 0 0 18px rgba(237, 28, 36, 0.7);
+      }
+      .loadingMeta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        color: #adb5ba;
+        font: 700 14px/1.4 "Courier New", monospace;
+        letter-spacing: 0.08em;
+      }
+
+      #gameHud {
+        position: fixed;
+        bottom: 22px;
+        left: 22px;
+        z-index: 12;
+        display: flex;
+        align-items: center;
+        gap: 18px;
         pointer-events: none;
+        filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.65));
       }
-      .debugLabel {
-        color: #9aa5ad;
+      #healthBar {
+        width: min(260px, 42vw);
+        height: 24px;
+        overflow: hidden;
+        border: 3px solid rgba(235, 239, 241, 0.9);
+        background: rgba(4, 6, 7, 0.88);
+        transform: skewX(-8deg);
       }
-      #ui {
-        position: absolute;
-        top: 94px;
-        left: 12px;
-        z-index: 10;
-        background: rgba(5, 8, 10, 0.78);
-        padding: 12px;
-        border-radius: 6px;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+      #healthFill {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, #138939, #59d36f);
+        box-shadow: 0 0 16px rgba(66, 209, 96, 0.5);
+        transition: width 160ms ease, background 180ms ease;
       }
-      #ui h2 {
-        margin: 0 0 8px;
-        font-size: 18px;
+      #healthFill.low {
+        background: linear-gradient(90deg, #7c0005, var(--blood));
+        box-shadow: 0 0 18px rgba(237, 28, 36, 0.75);
       }
-      #ui p {
-        margin: 8px 0 0;
+      .pointsBlock {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+        color: var(--gold);
       }
+      #points {
+        font-size: clamp(32px, 4vw, 48px);
+        font-weight: 950;
+        letter-spacing: -0.04em;
+        text-shadow: 0 2px 0 #6f4a00, 0 0 16px rgba(245, 190, 61, 0.3);
+      }
+      .pointsLabel {
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.16em;
+      }
+
       #roundUi {
-        position: absolute;
-        top: 12px;
-        right: 20px;
-        z-index: 10;
+        position: fixed;
+        top: 14px;
+        right: 22px;
+        z-index: 12;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        line-height: 0.8;
+        line-height: 0.78;
         pointer-events: none;
-        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.75));
+        filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.78));
       }
       #roundLabel {
         margin-right: 5px;
         color: #f3f3f3;
         font-size: 15px;
-        font-weight: 800;
+        font-weight: 900;
         letter-spacing: 0.3em;
       }
       #round {
-        color: #ed1c24;
+        color: var(--blood);
         font-size: clamp(64px, 9vw, 112px);
-        font-weight: 900;
+        font-weight: 950;
         letter-spacing: -0.08em;
-        -webkit-text-stroke: 2px rgba(84, 0, 0, 0.7);
-        text-shadow:
-          0 2px 0 #710006,
-          0 0 24px rgba(237, 28, 36, 0.4);
+        -webkit-text-stroke: 2px rgba(84, 0, 0, 0.75);
+        text-shadow: 0 3px 0 var(--deep-blood), 0 0 24px rgba(237, 28, 36, 0.4);
       }
-      #round.roundPop {
-        animation: roundPop 450ms ease-out;
+      #roundStatus {
+        margin-top: 8px;
+        color: #d6dadd;
+        font: 800 13px/1 "Courier New", monospace;
+        letter-spacing: 0.12em;
       }
+      #round.roundPop { animation: roundPop 450ms ease-out; }
       @keyframes roundPop {
-        0% {
-          opacity: 0;
-          transform: scale(1.45);
-        }
-        100% {
-          opacity: 1;
-          transform: scale(1);
-        }
+        0% { opacity: 0; transform: scale(1.45); }
+        100% { opacity: 1; transform: scale(1); }
       }
-      canvas {
-        display: block;
+
+      #damageVignette {
+        position: fixed;
+        inset: 0;
+        z-index: 18;
+        opacity: 0;
+        box-shadow:
+          inset 0 0 70px 28px rgba(255, 0, 0, 0.95),
+          inset 0 0 150px 45px rgba(115, 0, 0, 0.72);
+        pointer-events: none;
       }
-      button {
-        background: #444;
-        color: white;
-        border: 1px solid #777;
-        padding: 6px 12px;
-        cursor: pointer;
-        margin-top: 5px;
+      #damageVignette.active { animation: dangerPulse 850ms ease-in-out infinite; }
+      @keyframes dangerPulse {
+        0%, 100% { opacity: 0.32; }
+        50% { opacity: 0.9; }
       }
-      button:hover {
-        background: #666;
+
+      #gameOverScreen {
+        overflow-y: auto;
+        background:
+          linear-gradient(rgba(3, 4, 5, 0.9), rgba(3, 4, 5, 0.98)),
+          radial-gradient(circle at center, #420004, #050708 65%);
+      }
+      .gameOverPanel {
+        width: min(720px, 100%);
+        padding: 28px;
+        border-top: 4px solid var(--blood);
+        background: var(--panel);
+        box-shadow: 0 22px 65px rgba(0, 0, 0, 0.65);
+      }
+      .gameOverTitle {
+        margin: 0;
+        color: var(--blood);
+        font-size: clamp(50px, 9vw, 92px);
+        font-weight: 950;
+        letter-spacing: -0.07em;
+        line-height: 0.9;
+        text-transform: uppercase;
+        text-shadow: 0 3px 0 var(--deep-blood);
+      }
+      .runStats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin: 26px 0;
+      }
+      .runStat {
+        padding: 14px;
+        border: 1px solid #454b4f;
+        background: #101416;
+      }
+      .runStat strong { display: block; color: var(--gold); font-size: 38px; }
+      .runStat span {
+        color: #aeb5b9;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+      }
+      .leaderboardTitle {
+        margin: 0 0 10px;
+        color: #eef0f1;
+        font-size: 16px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+      .leaderboard {
+        width: 100%;
+        border-collapse: collapse;
+        font: 700 14px/1.3 "Courier New", monospace;
+      }
+      .leaderboard th, .leaderboard td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #30363a;
+        text-align: right;
+      }
+      .leaderboard th:first-child, .leaderboard td:first-child {
+        width: 60px;
+        text-align: left;
+      }
+      .leaderboard th {
+        color: #929ba1;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+      }
+      .leaderboard tr.currentRun td { color: var(--gold); }
+      #returnMessage {
+        margin: 20px 0 0;
+        color: #aeb5b9;
+        font-size: 14px;
+        letter-spacing: 0.08em;
+      }
+
+      #fadeOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        opacity: 0;
+        background: #000;
+        pointer-events: none;
+        transition: opacity 1.35s ease-out;
+      }
+      #fadeOverlay.opaque { opacity: 1; transition: none; }
+
+      @media (max-width: 620px) {
+        #gameHud { bottom: 14px; left: 14px; gap: 12px; }
+        #healthBar { width: 42vw; height: 20px; }
+        #roundUi { top: 10px; right: 14px; }
+        .gameOverPanel { padding: 20px 16px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #damageVignette.active { animation-duration: 1.8s; }
+        #round.roundPop { animation: none; }
+        #fadeOverlay { transition-duration: 300ms; }
       }
     </style>
   </head>
   <body>
-    <div id="debugUi" aria-label="Game debug information">
-      <div><span class="debugLabel">FPS</span> <span id="fps">0</span></div>
-      <div>
-        <span class="debugLabel">ZOMBIES LEFT</span>
-        <span id="zombiesLeft">6</span>
-      </div>
-    </div>
+    <canvas id="gameCanvas" aria-label="Zombie defense game"></canvas>
 
-    <div id="ui">
-      <h2>Top-Down Zombie Defense</h2>
-      <div>
-        Health: <span id="hp">100</span> | Kills: <span id="score">0</span>
+    <section id="mainMenu" class="screen" aria-labelledby="gameTitle">
+      <div class="menuContent">
+        <p class="eyebrow">SURVIVE THE OUTBREAK</p>
+        <h1 id="gameTitle" class="gameTitle">Map Zombie <span>Defense</span></h1>
+        <button id="playButton" type="button">Play</button>
+        <p class="controlsHint">WASD / Arrows to move · Left click to fire</p>
       </div>
-      <div>Mode: <span id="mode">Shoot</span></div>
-      <button id="toggleBuild">Switch to Build Mode (Wall)</button>
-      <p>
-        <small
-          >WASD / Arrows = Move | Left Click = Shoot / Place Wall | Space =
-          Toggle Mode</small
+    </section>
+
+    <section id="loadingScreen" class="screen" aria-labelledby="loadingTitle" hidden>
+      <div class="loadingContent">
+        <h2 id="loadingTitle" class="loadingTitle">Preparing the outbreak</h2>
+        <div
+          class="loadingTrack"
+          role="progressbar"
+          aria-label="Loading game"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
         >
-      </p>
-    </div>
+          <div id="loadingFill"></div>
+        </div>
+        <div class="loadingMeta">
+          <span id="loadingStatus">SECURING PERIMETER</span>
+          <span id="loadingPercent">0%</span>
+        </div>
+      </div>
+    </section>
 
-    <div id="roundUi" aria-label="Current round">
+    <div id="roundUi" aria-label="Current round" hidden>
       <span id="roundLabel">ROUND</span>
       <span id="round">1</span>
+      <span id="roundStatus">INCOMING 15</span>
     </div>
 
-    <canvas id="gameCanvas" aria-label="Zombie defense game"></canvas>
+    <div id="gameHud" aria-label="Health and points" hidden>
+      <div
+        id="healthBar"
+        role="progressbar"
+        aria-label="Health"
+        aria-valuemin="0"
+        aria-valuemax="150"
+        aria-valuenow="150"
+      >
+        <div id="healthFill"></div>
+      </div>
+      <div class="pointsBlock">
+        <span id="points">500</span>
+        <span class="pointsLabel">PTS</span>
+      </div>
+    </div>
+
+    <div id="damageVignette" aria-hidden="true"></div>
+
+    <section id="gameOverScreen" class="screen" aria-labelledby="gameOverTitle" hidden>
+      <div class="gameOverPanel">
+        <h2 id="gameOverTitle" class="gameOverTitle">Game Over</h2>
+        <div class="runStats">
+          <div class="runStat">
+            <strong id="finalKills">0</strong>
+            <span>KILLS</span>
+          </div>
+          <div class="runStat">
+            <strong id="finalRounds">0</strong>
+            <span>ROUNDS SURVIVED</span>
+          </div>
+        </div>
+
+        <h3 class="leaderboardTitle">Best runs</h3>
+        <table class="leaderboard">
+          <thead>
+            <tr>
+              <th scope="col">RANK</th>
+              <th scope="col">KILLS</th>
+              <th scope="col">ROUNDS</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table>
+        <p id="returnMessage">Returning to main menu in 7 seconds</p>
+      </div>
+    </section>
+
+    <div id="fadeOverlay" aria-hidden="true"></div>
 
     <script>
       const canvas = document.getElementById("gameCanvas");
       const ctx = canvas.getContext("2d");
-      const fpsElement = document.getElementById("fps");
-      const zombiesLeftElement = document.getElementById("zombiesLeft");
+      const mainMenu = document.getElementById("mainMenu");
+      const loadingScreen = document.getElementById("loadingScreen");
+      const gameOverScreen = document.getElementById("gameOverScreen");
+      const playButton = document.getElementById("playButton");
+      const loadingFill = document.getElementById("loadingFill");
+      const loadingTrack = document.querySelector(".loadingTrack");
+      const loadingStatus = document.getElementById("loadingStatus");
+      const loadingPercent = document.getElementById("loadingPercent");
+      const gameHud = document.getElementById("gameHud");
+      const healthBar = document.getElementById("healthBar");
+      const healthFill = document.getElementById("healthFill");
+      const pointsElement = document.getElementById("points");
+      const roundUi = document.getElementById("roundUi");
       const roundElement = document.getElementById("round");
+      const roundStatus = document.getElementById("roundStatus");
+      const damageVignette = document.getElementById("damageVignette");
+      const finalKills = document.getElementById("finalKills");
+      const finalRounds = document.getElementById("finalRounds");
+      const leaderboardBody = document.getElementById("leaderboardBody");
+      const returnMessage = document.getElementById("returnMessage");
+      const fadeOverlay = document.getElementById("fadeOverlay");
 
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
 
       const CAMERA_ZOOM = 1.18;
+      const MAX_HP = 150;
+      const ZOMBIE_DAMAGE = 50;
+      const ZOMBIE_ATTACK_COOLDOWN = 1000;
+      const REGEN_DELAY = 6000;
+      const REGEN_PER_SECOND = 12;
+      const STARTING_POINTS = 500;
+      const KILL_REWARD = 90;
       const FIRST_ROUND_ZOMBIES = 6;
       const ZOMBIES_ADDED_PER_ROUND = 3;
+      const ROUND_SPAWN_COOLDOWN = 15000;
       const ZOMBIE_SPAWN_DELAY = 650;
-      const ROUND_BREAK = 1800;
+      const ROUND_TRANSITION_DELAY = 1000;
+      const GAME_OVER_DURATION = 7000;
+      const LEADERBOARD_KEY = "mapZombieDefenseLeaderboardV1";
 
-      let score = 0;
-      let isBuildMode = false;
-      let round = 1;
-      let zombiesToSpawn = 0;
-      let zombiesLeftInRound = 0;
-      let nextZombieSpawnAt = 0;
-      let nextRoundAt = null;
+      const music = {
+        menu: new Audio("src/3-16-Damned.mp3"),
+        loading: new Audio("src/3-06-Lovesong for a Deadman.mp3"),
+        gameOver: new Audio("src/1-03-Lullaby for a Deadman.mp3"),
+      };
+      music.menu.volume = 0.45;
+      music.loading.volume = 0.45;
+      music.gameOver.volume = 0.5;
+      Object.values(music).forEach((track) => {
+        track.preload = "auto";
+      });
 
-      let lastFrameAt = performance.now();
-      let fpsSampleStartedAt = lastFrameAt;
-      let fpsFrames = 0;
+      const shotSoundSources = [
+        "src/sfx/shot_00.wav",
+        "src/sfx/shot_01.wav",
+        "src/sfx/shot_02.wav",
+        "src/sfx/shot_03.wav",
+        "src/sfx/shot_04.wav",
+      ];
+      const shotSoundTemplates = shotSoundSources.map((source) => {
+        const sound = new Audio(source);
+        sound.preload = "auto";
+        sound.volume = 0.38;
+        return sound;
+      });
 
-      // Input handling
       const keys = {};
-      const mouse = { x: 0, y: 0 };
-
-      window.addEventListener("keydown", (e) => {
-        keys[e.key.toLowerCase()] = true;
-        if (e.code === "Space") {
-          toggleMode();
-        }
-      });
-      window.addEventListener(
-        "keyup",
-        (e) => (keys[e.key.toLowerCase()] = false),
-      );
-      window.addEventListener("mousemove", (e) => {
-        mouse.x = e.clientX;
-        mouse.y = e.clientY;
-      });
-      window.addEventListener("resize", () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      });
-
-      // Player setup
+      const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+      const bullets = [];
+      const zombies = [];
       const player = {
         x: canvas.width / 2,
         y: canvas.height / 2,
         radius: 12,
         speed: 190,
-        hp: 100,
+        hp: MAX_HP,
         angle: 0,
       };
 
-      // Game entities
-      const bullets = [];
-      const zombies = [];
-      const walls = [];
+      let gameState = "boot";
+      let points = STARTING_POINTS;
+      let kills = 0;
+      let round = 1;
+      let roundsCompleted = 0;
+      let zombiesToSpawn = 0;
+      let zombiesLeftInRound = 0;
+      let roundSpawnReadyAt = 0;
+      let nextZombieSpawnAt = 0;
+      let nextRoundAt = null;
+      let lastDamageAt = -Infinity;
+      let loadingStartedAt = 0;
+      let gameOverStartedAt = 0;
+      let lastFrameAt = performance.now();
+      let volatileLeaderboard = [];
 
-      // Controls & Mode Toggle
-      document
-        .getElementById("toggleBuild")
-        .addEventListener("click", toggleMode);
+      function stopTrack(track) {
+        track.pause();
+        track.currentTime = 0;
+      }
+      function stopAllMusic() {
+        Object.values(music).forEach(stopTrack);
+      }
+      function playMusic(track, shouldLoop) {
+        Object.values(music).forEach((candidate) => {
+          if (candidate !== track) stopTrack(candidate);
+        });
+        track.loop = shouldLoop;
+        track.currentTime = 0;
+        const playPromise = track.play();
+        if (playPromise) playPromise.catch(() => {});
+      }
+      function resumeMenuMusic() {
+        if (gameState !== "menu" || !music.menu.paused) return;
+        music.menu.loop = true;
+        const playPromise = music.menu.play();
+        if (playPromise) playPromise.catch(() => {});
+      }
+      function playShotSound() {
+        const template =
+          shotSoundTemplates[Math.floor(Math.random() * shotSoundTemplates.length)];
+        const sound = template.cloneNode();
+        sound.volume = template.volume;
+        const playPromise = sound.play();
+        if (playPromise) playPromise.catch(() => {});
+      }
 
-      function toggleMode() {
-        isBuildMode = !isBuildMode;
-        document.getElementById("mode").textContent = isBuildMode
-          ? "Build (Walls Can Clip)"
-          : "Shoot";
-        document.getElementById("toggleBuild").textContent = isBuildMode
-          ? "Switch to Shoot Mode"
-          : "Switch to Build Mode (Wall)";
+      function setVisibleScreen(screen) {
+        mainMenu.hidden = screen !== mainMenu;
+        loadingScreen.hidden = screen !== loadingScreen;
+        gameOverScreen.hidden = screen !== gameOverScreen;
+      }
+      function setGameplayHudVisible(isVisible) {
+        gameHud.hidden = !isVisible;
+        roundUi.hidden = !isVisible;
+      }
+      function updateHealthHud() {
+        const hpPercent = Math.max(0, (player.hp / MAX_HP) * 100);
+        healthFill.style.width = `${hpPercent}%`;
+        healthFill.classList.toggle("low", player.hp < 51);
+        healthBar.setAttribute("aria-valuenow", Math.ceil(player.hp));
+        damageVignette.classList.toggle(
+          "active",
+          gameState === "playing" && player.hp < 51 && player.hp > 0,
+        );
+      }
+      function updatePointsHud() {
+        pointsElement.textContent = points;
+      }
+
+      function enterMainMenu() {
+        gameState = "menu";
+        setVisibleScreen(mainMenu);
+        setGameplayHudVisible(false);
+        damageVignette.classList.remove("active");
+        bullets.length = 0;
+        zombies.length = 0;
+        Object.keys(keys).forEach((key) => {
+          keys[key] = false;
+        });
+        playMusic(music.menu, true);
+        playButton.focus({ preventScroll: true });
+      }
+
+      function setLoadingProgress(progress, status) {
+        const displayProgress = Math.min(100, Math.max(0, progress));
+        loadingFill.style.width = `${displayProgress}%`;
+        loadingPercent.textContent = `${Math.floor(displayProgress)}%`;
+        loadingStatus.textContent = status;
+        loadingTrack.setAttribute("aria-valuenow", Math.floor(displayProgress));
+      }
+      function startLoading() {
+        if (gameState !== "menu") return;
+        gameState = "loading";
+        loadingStartedAt = performance.now();
+        setVisibleScreen(loadingScreen);
+        setGameplayHudVisible(false);
+        setLoadingProgress(0, "SECURING PERIMETER");
+        playMusic(music.loading, true);
+      }
+      function updateLoading(now) {
+        const elapsed = now - loadingStartedAt;
+        if (elapsed < 600) {
+          setLoadingProgress((elapsed / 600) * 30, "SECURING PERIMETER");
+          return;
+        }
+        if (elapsed < 2600) {
+          setLoadingProgress(30, "WAITING FOR SURVIVORS");
+          return;
+        }
+        if (elapsed < 3600) {
+          setLoadingProgress(
+            30 + ((elapsed - 2600) / 1000) * 69,
+            "OPENING THE GATE",
+          );
+          return;
+        }
+        if (elapsed < 3850) {
+          setLoadingProgress(99 + (elapsed - 3600) / 250, "READY");
+          return;
+        }
+        setLoadingProgress(100, "READY");
+        beginGame(now);
+      }
+
+      function resetGame(now) {
+        points = STARTING_POINTS;
+        kills = 0;
+        round = 1;
+        roundsCompleted = 0;
+        zombiesToSpawn = 0;
+        zombiesLeftInRound = 0;
+        nextRoundAt = null;
+        lastDamageAt = -Infinity;
+        bullets.length = 0;
+        zombies.length = 0;
+        player.x = canvas.width / 2;
+        player.y = canvas.height / 2;
+        player.hp = MAX_HP;
+        player.angle = 0;
+        updatePointsHud();
+        updateHealthHud();
+        startRound(now);
+      }
+      function beginGame(now) {
+        if (gameState !== "loading") return;
+        fadeOverlay.classList.add("opaque");
+        stopAllMusic();
+        setVisibleScreen(null);
+        setGameplayHudVisible(true);
+        gameState = "playing";
+        resetGame(now);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => fadeOverlay.classList.remove("opaque"));
+        });
+      }
+
+      function startRound(startedAt) {
+        const roundSize =
+          FIRST_ROUND_ZOMBIES + (round - 1) * ZOMBIES_ADDED_PER_ROUND;
+        zombiesToSpawn = roundSize;
+        zombiesLeftInRound = roundSize;
+        roundSpawnReadyAt = startedAt + ROUND_SPAWN_COOLDOWN;
+        nextZombieSpawnAt = roundSpawnReadyAt;
+        nextRoundAt = null;
+        roundElement.textContent = round;
+        roundStatus.textContent = "INCOMING 15";
+        roundElement.classList.remove("roundPop");
+        void roundElement.offsetWidth;
+        roundElement.classList.add("roundPop");
+      }
+      function updateRound(now) {
+        if (nextRoundAt !== null) {
+          if (now >= nextRoundAt) {
+            round += 1;
+            startRound(now);
+          }
+          return;
+        }
+        if (now < roundSpawnReadyAt) {
+          const secondsLeft = Math.max(
+            1,
+            Math.ceil((roundSpawnReadyAt - now) / 1000),
+          );
+          roundStatus.textContent = `INCOMING ${secondsLeft}`;
+          return;
+        }
+        roundStatus.textContent = "ACTIVE";
+        if (zombiesToSpawn > 0 && now >= nextZombieSpawnAt) {
+          spawnZombie();
+          zombiesToSpawn -= 1;
+          nextZombieSpawnAt = now + ZOMBIE_SPAWN_DELAY;
+        }
       }
 
       function screenToWorld(screenX, screenY) {
@@ -221,41 +700,12 @@
           y: player.y + (screenY - canvas.height / 2) / CAMERA_ZOOM,
         };
       }
-
-      // Shooting / Building interaction
-      window.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return; // Left click only
-
-        const target = screenToWorld(mouse.x, mouse.y);
-
-        if (isBuildMode) {
-          // Place wall centered on mouse with intentional clipping allowed
-          walls.push({
-            x: target.x - 20,
-            y: target.y - 20,
-            width: 40,
-            height: 40,
-            hp: 100,
-          });
-        } else {
-          // Shoot bullet from player center towards mouse position
-          const angle = Math.atan2(target.y - player.y, target.x - player.x);
-          bullets.push({
-            x: player.x,
-            y: player.y,
-            vx: Math.cos(angle) * 520,
-            vy: Math.sin(angle) * 520,
-          });
-        }
-      });
-
-      // Spawn zombies (Red dots)
       function spawnZombie() {
         const halfViewWidth = canvas.width / (2 * CAMERA_ZOOM);
         const halfViewHeight = canvas.height / (2 * CAMERA_ZOOM);
         const spawnMargin = 24;
-        let x, y;
-
+        let x;
+        let y;
         if (Math.random() < 0.5) {
           x =
             player.x +
@@ -269,58 +719,136 @@
             (Math.random() < 0.5 ? -1 : 1) *
               (halfViewHeight + spawnMargin);
         }
-
         zombies.push({
           x,
           y,
           radius: 6,
           speed: 42 + Math.random() * 18,
+          lastAttackAt: -Infinity,
         });
       }
 
-      function startRound(startedAt) {
-        const roundSize =
-          FIRST_ROUND_ZOMBIES + (round - 1) * ZOMBIES_ADDED_PER_ROUND;
-
-        zombiesToSpawn = roundSize;
-        zombiesLeftInRound = roundSize;
-        nextZombieSpawnAt = startedAt + 350;
-        nextRoundAt = null;
-
-        roundElement.textContent = round;
-        zombiesLeftElement.textContent = zombiesLeftInRound;
-        roundElement.classList.remove("roundPop");
-        void roundElement.offsetWidth;
-        roundElement.classList.add("roundPop");
+      function shoot() {
+        if (gameState !== "playing" || player.hp <= 0) return;
+        const target = screenToWorld(mouse.x, mouse.y);
+        const angle = Math.atan2(target.y - player.y, target.x - player.x);
+        bullets.push({
+          x: player.x,
+          y: player.y,
+          vx: Math.cos(angle) * 520,
+          vy: Math.sin(angle) * 520,
+        });
+        playShotSound();
+      }
+      function damagePlayer(amount, now) {
+        if (gameState !== "playing" || player.hp <= 0) return;
+        player.hp = Math.max(0, player.hp - amount);
+        lastDamageAt = now;
+        updateHealthHud();
+        if (player.hp === 0) endGame(now);
+      }
+      function updateHealthRegeneration(now, deltaTime) {
+        if (
+          player.hp <= 0 ||
+          player.hp >= MAX_HP ||
+          now - lastDamageAt < REGEN_DELAY
+        ) {
+          return;
+        }
+        player.hp = Math.min(
+          MAX_HP,
+          player.hp + REGEN_PER_SECOND * deltaTime,
+        );
+        updateHealthHud();
       }
 
-      function updateRound(now) {
-        if (zombiesToSpawn > 0 && now >= nextZombieSpawnAt) {
-          spawnZombie();
-          zombiesToSpawn -= 1;
-          nextZombieSpawnAt = now + ZOMBIE_SPAWN_DELAY;
+      function readLeaderboard() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
+          return Array.isArray(saved) ? saved : [];
+        } catch {
+          return volatileLeaderboard;
         }
-
-        if (nextRoundAt !== null && now >= nextRoundAt) {
-          round += 1;
-          startRound(now);
+      }
+      function recordRun() {
+        const entry = {
+          id: `${Date.now()}-${Math.random()}`,
+          kills,
+          rounds: roundsCompleted,
+        };
+        const leaderboard = [...readLeaderboard(), entry]
+          .filter(
+            (run) =>
+              Number.isFinite(run.kills) && Number.isFinite(run.rounds),
+          )
+          .sort((a, b) => b.rounds - a.rounds || b.kills - a.kills)
+          .slice(0, 5);
+        volatileLeaderboard = leaderboard;
+        try {
+          localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+        } catch {
+          // In-memory scores remain available when storage is blocked.
+        }
+        return { entry, leaderboard };
+      }
+      function renderLeaderboard(currentEntry, leaderboard) {
+        leaderboardBody.innerHTML = leaderboard
+          .map(
+            (entry, index) => `
+              <tr class="${entry.id === currentEntry.id ? "currentRun" : ""}">
+                <td>#${index + 1}</td>
+                <td>${entry.kills}</td>
+                <td>${entry.rounds}</td>
+              </tr>
+            `,
+          )
+          .join("");
+      }
+      function endGame(now) {
+        if (gameState !== "playing") return;
+        gameState = "gameover";
+        gameOverStartedAt = now;
+        setGameplayHudVisible(false);
+        damageVignette.classList.remove("active");
+        finalKills.textContent = kills;
+        finalRounds.textContent = roundsCompleted;
+        const result = recordRun();
+        renderLeaderboard(result.entry, result.leaderboard);
+        returnMessage.textContent = "Returning to main menu in 7 seconds";
+        setVisibleScreen(gameOverScreen);
+        playMusic(music.gameOver, false);
+      }
+      function updateGameOver(now) {
+        const elapsed = now - gameOverStartedAt;
+        const secondsLeft = Math.max(
+          0,
+          Math.ceil((GAME_OVER_DURATION - elapsed) / 1000),
+        );
+        returnMessage.textContent =
+          `Returning to main menu in ${secondsLeft} ` +
+          `second${secondsLeft === 1 ? "" : "s"}`;
+        if (elapsed >= GAME_OVER_DURATION) enterMainMenu();
+      }
+      function registerZombieKill(now) {
+        kills += 1;
+        points += KILL_REWARD;
+        zombiesLeftInRound = Math.max(0, zombiesLeftInRound - 1);
+        updatePointsHud();
+        if (zombiesLeftInRound === 0) {
+          roundsCompleted += 1;
+          roundStatus.textContent = "CLEARED";
+          nextRoundAt = now + ROUND_TRANSITION_DELAY;
         }
       }
 
-      // Game Loop
-      function update(now, deltaTime) {
-        if (player.hp <= 0) return;
-
+      function updateGame(now, deltaTime) {
         updateRound(now);
-
-        // Movement
         let moveX = 0;
         let moveY = 0;
-        if (keys["w"] || keys["arrowup"]) moveY -= 1;
-        if (keys["s"] || keys["arrowdown"]) moveY += 1;
-        if (keys["a"] || keys["arrowleft"]) moveX -= 1;
-        if (keys["d"] || keys["arrowright"]) moveX += 1;
-
+        if (keys.w || keys.arrowup) moveY -= 1;
+        if (keys.s || keys.arrowdown) moveY += 1;
+        if (keys.a || keys.arrowleft) moveX -= 1;
+        if (keys.d || keys.arrowright) moveX += 1;
         const moveLength = Math.hypot(moveX, moveY) || 1;
         player.x += (moveX / moveLength) * player.speed * deltaTime;
         player.y += (moveY / moveLength) * player.speed * deltaTime;
@@ -331,75 +859,67 @@
           aimTarget.x - player.x,
         );
 
-        // Update Bullets
         for (let i = bullets.length - 1; i >= 0; i--) {
-          const b = bullets[i];
-          b.x += b.vx * deltaTime;
-          b.y += b.vy * deltaTime;
-
-          // Remove offscreen bullets
+          const bullet = bullets[i];
+          bullet.x += bullet.vx * deltaTime;
+          bullet.y += bullet.vy * deltaTime;
           const halfViewWidth = canvas.width / (2 * CAMERA_ZOOM) + 40;
           const halfViewHeight = canvas.height / (2 * CAMERA_ZOOM) + 40;
           if (
-            Math.abs(b.x - player.x) > halfViewWidth ||
-            Math.abs(b.y - player.y) > halfViewHeight
+            Math.abs(bullet.x - player.x) > halfViewWidth ||
+            Math.abs(bullet.y - player.y) > halfViewHeight
           ) {
             bullets.splice(i, 1);
             continue;
           }
-
-          // Bullet-Zombie collisions
           for (let j = zombies.length - 1; j >= 0; j--) {
-            const z = zombies[j];
-            const dist = Math.hypot(b.x - z.x, b.y - z.y);
-            if (dist < z.radius + 3) {
+            const zombie = zombies[j];
+            const distance = Math.hypot(
+              bullet.x - zombie.x,
+              bullet.y - zombie.y,
+            );
+            if (distance < zombie.radius + 3) {
               zombies.splice(j, 1);
               bullets.splice(i, 1);
-              score += 10;
-              zombiesLeftInRound = Math.max(0, zombiesLeftInRound - 1);
-              document.getElementById("score").textContent = score;
-              zombiesLeftElement.textContent = zombiesLeftInRound;
-
-              if (zombiesLeftInRound === 0) {
-                nextRoundAt = now + ROUND_BREAK;
-              }
+              registerZombieKill(now);
               break;
             }
           }
         }
 
-        // Update Zombies
         for (let i = zombies.length - 1; i >= 0; i--) {
-          const z = zombies[i];
-
-          // Chase player
-          const angle = Math.atan2(player.y - z.y, player.x - z.x);
-          z.x += Math.cos(angle) * z.speed * deltaTime;
-          z.y += Math.sin(angle) * z.speed * deltaTime;
-
-          // Zombie damage to player
-          const distToPlayer = Math.hypot(player.x - z.x, player.y - z.y);
-          if (distToPlayer < player.radius + z.radius) {
-            player.hp -= 24 * deltaTime;
-            document.getElementById("hp").textContent = Math.max(
-              0,
-              Math.floor(player.hp),
-            );
+          const zombie = zombies[i];
+          const angle = Math.atan2(
+            player.y - zombie.y,
+            player.x - zombie.x,
+          );
+          zombie.x += Math.cos(angle) * zombie.speed * deltaTime;
+          zombie.y += Math.sin(angle) * zombie.speed * deltaTime;
+          const distanceToPlayer = Math.hypot(
+            player.x - zombie.x,
+            player.y - zombie.y,
+          );
+          if (
+            distanceToPlayer < player.radius + zombie.radius &&
+            now - zombie.lastAttackAt >= ZOMBIE_ATTACK_COOLDOWN
+          ) {
+            zombie.lastAttackAt = now;
+            damagePlayer(ZOMBIE_DAMAGE, now);
+            if (gameState !== "playing") break;
           }
         }
+        updateHealthRegeneration(now, deltaTime);
       }
 
       function drawMapBackground() {
-        // Map simulation background grid / road aesthetic
-        ctx.fillStyle = "#2c3e50";
         const halfViewWidth = canvas.width / (2 * CAMERA_ZOOM);
         const halfViewHeight = canvas.height / (2 * CAMERA_ZOOM);
         const left = player.x - halfViewWidth;
         const right = player.x + halfViewWidth;
         const top = player.y - halfViewHeight;
         const bottom = player.y + halfViewHeight;
-        ctx.fillRect(left, top, right - left, bottom - top);
-
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(left - 1, top - 1, right - left + 2, bottom - top + 2);
         ctx.strokeStyle = "#34495e";
         ctx.lineWidth = 2;
         const gridSize = 80;
@@ -418,93 +938,81 @@
           ctx.stroke();
         }
       }
-
       function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Keep the player centered and slightly zoom the game world.
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
         ctx.translate(-player.x, -player.y);
-
         drawMapBackground();
 
-        // Draw Walls (allows overlapping placement / clipping)
-        ctx.fillStyle = "#7f8c8d";
-        ctx.strokeStyle = "#95a5a6";
-        ctx.lineWidth = 2;
-        walls.forEach((w) => {
-          ctx.fillRect(w.x, w.y, w.width, w.height);
-          ctx.strokeRect(w.x, w.y, w.width, w.height);
-        });
-
-        // Draw Bullets
         ctx.fillStyle = "#f1c40f";
-        bullets.forEach((b) => {
+        bullets.forEach((bullet) => {
           ctx.beginPath();
-          ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+          ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
           ctx.fill();
         });
-
-        // Draw Zombies (Red Dots)
         ctx.fillStyle = "#e74c3c";
-        zombies.forEach((z) => {
+        zombies.forEach((zombie) => {
           ctx.beginPath();
-          ctx.arc(z.x, z.y, z.radius, 0, Math.PI * 2);
+          ctx.arc(zombie.x, zombie.y, zombie.radius, 0, Math.PI * 2);
           ctx.fill();
         });
-
-        // Draw Player
-        ctx.save();
-        ctx.translate(player.x, player.y);
-        ctx.rotate(player.angle);
-
-        // Gun
-        ctx.fillStyle = "#111";
-        ctx.fillRect(0, -3, player.radius + 8, 6);
-
-        // Body
-        ctx.fillStyle = "#3498db";
-        ctx.beginPath();
-        ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
-        ctx.restore();
-
-        if (player.hp <= 0) {
-          ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = "#e74c3c";
-          ctx.font = "48px Arial";
-          ctx.textAlign = "center";
-          ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+        if (gameState === "playing" || gameState === "gameover") {
+          ctx.save();
+          ctx.translate(player.x, player.y);
+          ctx.rotate(player.angle);
+          ctx.fillStyle = "#111";
+          ctx.fillRect(0, -3, player.radius + 8, 6);
+          ctx.fillStyle = "#3498db";
+          ctx.beginPath();
+          ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
-      }
-
-      function updateFps(now) {
-        fpsFrames += 1;
-        const sampleDuration = now - fpsSampleStartedAt;
-
-        if (sampleDuration >= 500) {
-          fpsElement.textContent = Math.round((fpsFrames * 1000) / sampleDuration);
-          fpsFrames = 0;
-          fpsSampleStartedAt = now;
-        }
+        ctx.restore();
       }
 
       function loop(now) {
         const deltaTime = Math.min((now - lastFrameAt) / 1000, 0.033);
         lastFrameAt = now;
-
-        updateFps(now);
-        update(now, deltaTime);
+        if (gameState === "loading") updateLoading(now);
+        if (gameState === "playing") updateGame(now, deltaTime);
+        if (gameState === "gameover") updateGameOver(now);
         draw();
         requestAnimationFrame(loop);
       }
 
-      startRound(performance.now());
+      playButton.addEventListener("click", startLoading);
+      canvas.addEventListener("mousedown", (event) => {
+        if (event.button === 0) shoot();
+      });
+      window.addEventListener("mousemove", (event) => {
+        mouse.x = event.clientX;
+        mouse.y = event.clientY;
+      });
+      window.addEventListener("keydown", (event) => {
+        const key = event.key.toLowerCase();
+        keys[key] = true;
+        if (gameState === "menu" && event.key === "Enter") startLoading();
+        if (
+          gameState === "playing" &&
+          ["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)
+        ) {
+          event.preventDefault();
+        }
+      });
+      window.addEventListener("keyup", (event) => {
+        keys[event.key.toLowerCase()] = false;
+      });
+      window.addEventListener("resize", () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+      window.addEventListener("pointerdown", resumeMenuMusic, { once: true });
+      window.addEventListener("keydown", resumeMenuMusic, { once: true });
+
+      enterMainMenu();
       requestAnimationFrame(loop);
     </script>
   </body>
