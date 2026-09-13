@@ -150,6 +150,7 @@
       }
       #playButton:hover { filter: brightness(1.18); transform: translateY(-2px); }
       #playButton:active { transform: translateY(2px); }
+      #playButton:disabled { opacity: .5; cursor: not-allowed; filter: none; transform: none; }
       #playButton:focus-visible { outline: 3px solid #fff; outline-offset: 5px; }
       .modeSelector {
         width: min(980px, 100%);
@@ -226,6 +227,48 @@
         font: 800 10px/1.3 "Courier New", monospace;
         letter-spacing: .12em;
       }
+      .partyPanel {
+        width: min(980px, 100%);
+        margin: 16px auto 0;
+        padding: 16px;
+        border-top: 3px solid #40c9e7;
+        background: linear-gradient(110deg, rgba(9, 25, 31, .94), rgba(5, 8, 11, .94));
+        box-shadow: 0 14px 36px rgba(0, 0, 0, .36);
+        text-align: left;
+      }
+      .partyFields { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 12px; }
+      .partyField { display: grid; gap: 7px; min-width: 0; }
+      .partyField label { color: #a9bec5; font: 800 12px/1.2 "Courier New", monospace; letter-spacing: .12em; }
+      .partyField input {
+        width: 100%; min-height: 42px; padding: 9px 11px;
+        border: 1px solid #55717b; background: #071014; color: #f1fbff;
+        font: 800 16px/1.2 "Courier New", monospace;
+      }
+      .partyField input:focus-visible { outline: 2px solid #65ddf4; outline-offset: 2px; }
+      .partyField input[readonly] { color: #76e5fa; letter-spacing: .22em; }
+      .partyActions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+      .partyAction {
+        min-height: 38px; padding: 8px 13px; border: 1px solid #5a7780;
+        background: #11242b; color: #fff; cursor: pointer;
+        font: 900 12px/1 "Courier New", monospace; letter-spacing: .08em;
+      }
+      .partyAction:hover { border-color: #8ee9fa; background: #174456; }
+      .partyAction:disabled { opacity: .42; cursor: not-allowed; }
+      .partyAction.danger { border-color: #9e3941; color: #ffbec2; }
+      #partyStatus { min-height: 18px; margin: 11px 0 0; color: #adc4cb; font: 700 13px/1.35 "Courier New", monospace; }
+      #partyStatus.error { color: #ff898f; }
+      #partyRoster { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+      #partyRoster:empty { display: none; }
+      .partyMember { padding: 5px 8px; border: 1px solid #426774; background: #0e252d; color: #dcf9ff; font: 800 12px/1 "Courier New", monospace; }
+      #partyHud {
+        position: fixed; top: 18px; left: 18px; z-index: 15; min-width: 154px;
+        padding: 7px 10px; border-left: 3px solid #48d7f1;
+        background: rgba(3, 10, 13, .83); color: #dff9ff;
+        pointer-events: none; font: 800 12px/1.5 "Courier New", monospace;
+      }
+      #partyHud[hidden] { display: none; }
+      #partyHud.extraction { top: 310px; }
+      #partyHud .partySelf { color: #79e9ff; }
       .weaponSelector {
         width: min(980px, 100%);
         margin: 18px auto 0;
@@ -978,6 +1021,8 @@
       #fadeOverlay.opaque { opacity: 1; transition: none; }
 
       @media (max-width: 620px) {
+        .partyFields { grid-template-columns: 1fr; }
+        #partyHud.extraction { top: 245px; }
         .modeButtons { grid-template-columns: 1fr; }
         .modeSelector { margin-top: 26px; }
         .weaponSelector { margin-top: 14px; padding: 11px; }
@@ -1091,6 +1136,31 @@
             </button>
           </div>
         </div>
+        <div class="partyPanel" aria-label="Party multiplayer">
+          <span class="modeSelectorLabel">PARTY · UP TO 4 PLAYERS</span>
+          <div class="partyFields">
+            <div class="partyField">
+              <label for="partyName">PARTY NAME</label>
+              <input id="partyName" type="text" maxlength="36" autocomplete="off" placeholder="YOUR SQUAD" />
+            </div>
+            <div class="partyField">
+              <label for="partyCode">YOUR PARTY CODE</label>
+              <input id="partyCode" type="text" readonly aria-label="Your party code" placeholder="CREATE A PARTY" />
+            </div>
+            <div class="partyField">
+              <label for="joinPartyCode">JOIN A PARTY CODE</label>
+              <input id="joinPartyCode" type="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ENTER CODE" />
+            </div>
+          </div>
+          <div class="partyActions">
+            <button id="createPartyButton" class="partyAction" type="button">CREATE PARTY</button>
+            <button id="joinPartyButton" class="partyAction" type="button">JOIN PARTY</button>
+            <button id="copyPartyCodeButton" class="partyAction" type="button" disabled>COPY CODE</button>
+            <button id="leavePartyButton" class="partyAction danger" type="button" disabled>LEAVE PARTY</button>
+          </div>
+          <p id="partyStatus" role="status" aria-live="polite">Play solo, or create a party to invite friends.</p>
+          <div id="partyRoster" aria-label="Party members"></div>
+        </div>
         <button id="playButton" type="button">Play</button>
         <p class="controlsHint">WASD / Arrows to move · Left click to fire · R reload · F interact · Caps Tac-Map · F1 debug · Esc pause</p>
       </div>
@@ -1133,6 +1203,7 @@
       <span id="round">1</span>
       <span id="roundStatus">INCOMING 15</span>
     </div>
+    <div id="partyHud" aria-label="Party teammates" hidden></div>
 
     <div id="miniMapHud" aria-label="Ashika Island minimap and operation timer" hidden>
       <canvas id="miniMapCanvas" width="480" height="480"></canvas>
@@ -1361,6 +1432,16 @@
       const gameOverScreen = document.getElementById("gameOverScreen");
       const pauseScreen = document.getElementById("pauseScreen");
       const playButton = document.getElementById("playButton");
+      const partyNameInput = document.getElementById("partyName");
+      const partyCodeInput = document.getElementById("partyCode");
+      const joinPartyCodeInput = document.getElementById("joinPartyCode");
+      const createPartyButton = document.getElementById("createPartyButton");
+      const joinPartyButton = document.getElementById("joinPartyButton");
+      const copyPartyCodeButton = document.getElementById("copyPartyCodeButton");
+      const leavePartyButton = document.getElementById("leavePartyButton");
+      const partyStatus = document.getElementById("partyStatus");
+      const partyRoster = document.getElementById("partyRoster");
+      const partyHud = document.getElementById("partyHud");
       const resumeButton = document.getElementById("resumeButton");
       const quitButton = document.getElementById("quitButton");
       const modeButtons = Array.from(document.querySelectorAll(".modeButton"));
@@ -1897,7 +1978,8 @@
           if (this.magazine <= 0) return;
           if (!debugFlags.infiniteAmmo) this.magazine -= 1;
           const muzzleDistance = player.radius + 8;
-          bullets.push({
+          if (isPartyGuest()) queuePartyAction({ type: "fire", angle });
+          else bullets.push({
             x: player.x + Math.cos(angle) * muzzleDistance,
             y: player.y + Math.sin(angle) * muzzleDistance,
             vx: Math.cos(angle) * 720,
@@ -3322,6 +3404,23 @@
       let objectiveCompleteBannerUntil = 0;
       let scoreFeedEntries = [];
       let nextScoreFeedId = 1;
+      let partySession = null;
+      let partyRoom = null;
+      let partyPollTimer = null;
+      let partyPulsePending = false;
+      let partyStarting = false;
+      let partyForcedMapId = null;
+      let partySpawnAligned = false;
+      let partyLastActionId = 0;
+      let partyNextClientActionId = 1;
+      const partyOutgoingActions = [];
+      const partyRemotePlayers = new Map();
+      const partyRemoteHealth = new Map();
+      const partyRemoteLastDamageAt = new Map();
+      const partyLeaderOnlyInteractions = new Set([
+        "outbreak-anomaly", "outbreak-safe-exit", "outbreak-beacon",
+        "outbreak-truck-drive", "outbreak-truck-exit", "ashika-exfil",
+      ]);
       const debugFlags = { god: false, infiniteAmmo: false, infinitePoints: false };
 
       function isOutbreakMode() {
@@ -3329,6 +3428,12 @@
       }
       function isExtractionMode() {
         return gameModes[selectedModeKey]?.ruleset === "extraction";
+      }
+      function isPartyHost() {
+        return Boolean(partySession && partyRoom?.selfId === partyRoom?.hostId);
+      }
+      function isPartyGuest() {
+        return Boolean(partySession && partyRoom && partyRoom.selfId !== partyRoom.hostId);
       }
 
       function stopTrack(track) {
@@ -3395,6 +3500,8 @@
         if (!isVisible || !isExtractionMode()) extractionWarning.hidden = true;
         objectiveHud.hidden = !isVisible || !isOutbreakMode();
         if (!isVisible) interactPrompt.hidden = true;
+        partyHud.hidden = !isVisible || !partySession;
+        partyHud.classList.toggle("extraction", isExtractionMode());
       }
       function updateHealthHud() {
         const hpPercent = Math.max(0, (player.hp / player.maxHp) * 100);
@@ -3556,7 +3663,381 @@
         return true;
       }
 
+      async function partyRequest(action, data) {
+        const response = await fetch(`/api/party/${action}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        let result;
+        try { result = await response.json(); }
+        catch { throw new Error("Party server unavailable. Run this game through the party server."); }
+        if (!response.ok) throw new Error(result.error || "Party request failed.");
+        return result;
+      }
+      function setPartyStatus(message, error = false) {
+        partyStatus.textContent = message;
+        partyStatus.classList.toggle("error", error);
+      }
+      function updatePartyDisplay() {
+        const joined = Boolean(partySession && partyRoom);
+        partyCodeInput.value = joined ? partyRoom.code : "";
+        if (joined) partyNameInput.value = partyRoom.name;
+        partyNameInput.readOnly = joined;
+        createPartyButton.disabled = joined || partyStarting;
+        joinPartyButton.disabled = joined || partyStarting;
+        copyPartyCodeButton.disabled = !joined;
+        leavePartyButton.disabled = !joined;
+        playButton.disabled = partyStarting || (joined && !isPartyHost());
+        playButton.textContent = joined ? isPartyHost() ? "Start Party" : "Waiting for Leader" : "Play";
+        partyRoster.innerHTML = joined
+          ? partyRoom.players.map((member) => `<span class="partyMember">${member.name}${member.id === partyRoom.hostId ? " · LEADER" : ""}</span>`).join("")
+          : "";
+        partyHud.hidden = !joined || !["playing", "paused", "gameover"].includes(gameState);
+        partyHud.classList.toggle("extraction", isExtractionMode());
+        if (!partyHud.hidden) {
+          partyHud.innerHTML = partyRoom.players
+            .map((member) => {
+              const hp = member.id === partyRoom.selfId
+                ? player.hp
+                : partyRemotePlayers.get(member.id)?.hp ?? member.state?.hp ?? 150;
+              return `<div class="${member.id === partyRoom.selfId ? "partySelf" : ""}">${member.name} ${Math.ceil(hp)} HP</div>`;
+            })
+            .join("");
+        }
+      }
+      function updatePartyRoom(room) {
+        if (!partySession || room.code !== partySession.code) return;
+        partyRoom = room;
+        partyRemotePlayers.clear();
+        for (const member of room.players) {
+          if (member.id === room.selfId || !member.state) continue;
+          const health = isPartyHost()
+            ? partyRemoteHealth.get(member.id) ?? member.state.hp
+            : member.state.hp;
+          partyRemotePlayers.set(member.id, { ...member.state, id: member.id, name: member.name, hp: health, radius: player.radius });
+          if (isPartyHost() && !partyRemoteHealth.has(member.id)) partyRemoteHealth.set(member.id, health);
+        }
+        for (const id of partyRemoteHealth.keys()) {
+          if (!room.players.some((member) => member.id === id)) {
+            partyRemoteHealth.delete(id);
+            partyRemoteLastDamageAt.delete(id);
+          }
+        }
+        updatePartyDisplay();
+        if (gameState === "menu") {
+          setPartyStatus(isPartyHost()
+            ? `${room.name} · ${room.players.length}/4 players · share ${room.code}, then start`
+            : `${room.name} · ${room.players.length}/4 players · waiting for leader`);
+        }
+        if (isPartyHost()) {
+          for (const action of room.actions || []) {
+            if (action.id <= partyLastActionId) continue;
+            partyLastActionId = action.id;
+            processPartyAction(action);
+          }
+        } else if (room.phase === "playing") {
+          if (gameState === "menu") {
+            selectGameMode(room.mode);
+            partyForcedMapId = room.mapId;
+            if (partyForcedMapId && outbreakMapConfigs[partyForcedMapId]) activateOutbreakMap(partyForcedMapId);
+            startLoading();
+          } else if (room.world && ["loading", "playing", "paused"].includes(gameState)) {
+            applyPartyWorld(room.world);
+          }
+        }
+      }
+      async function createParty() {
+        if (partySession || partyStarting) return;
+        partyStarting = true;
+        updatePartyDisplay();
+        try {
+          const result = await partyRequest("create", { name: partyNameInput.value });
+          partySession = { code: result.room.code, token: result.token };
+          updatePartyRoom(result.room);
+          setPartyStatus(`Party ready · share code ${result.room.code} · ${result.room.players.length}/4 players`);
+          partyPollTimer = setInterval(pulseParty, 150);
+        } catch (error) {
+          setPartyStatus(error.message, true);
+        } finally {
+          partyStarting = false;
+          updatePartyDisplay();
+        }
+      }
+      async function joinParty() {
+        if (partySession || partyStarting) return;
+        partyStarting = true;
+        updatePartyDisplay();
+        try {
+          const result = await partyRequest("join", { code: joinPartyCodeInput.value.trim().toUpperCase() });
+          partySession = { code: result.room.code, token: result.token };
+          updatePartyRoom(result.room);
+          setPartyStatus(`Joined ${result.room.name} · waiting for the leader · ${result.room.players.length}/4 players`);
+          partyPollTimer = setInterval(pulseParty, 150);
+        } catch (error) {
+          setPartyStatus(error.message, true);
+        } finally {
+          partyStarting = false;
+          updatePartyDisplay();
+        }
+      }
+      function leaveParty() {
+        if (!partySession) return;
+        const session = partySession;
+        partySession = null;
+        partyRoom = null;
+        partyForcedMapId = null;
+        partySpawnAligned = false;
+        partyLastActionId = 0;
+        partyNextClientActionId = 1;
+        partyOutgoingActions.length = 0;
+        partyRemotePlayers.clear();
+        partyRemoteHealth.clear();
+        partyRemoteLastDamageAt.clear();
+        clearInterval(partyPollTimer);
+        partyPollTimer = null;
+        partyCodeInput.value = "";
+        setPartyStatus("Play solo, or create a party to invite friends.");
+        updatePartyDisplay();
+        partyRequest("leave", session).catch(() => {});
+      }
+      async function startSelectedGame() {
+        if (gameState !== "menu" || partyStarting) return;
+        if (!partySession) {
+          startLoading();
+          return;
+        }
+        if (!isPartyHost()) return;
+        partyStarting = true;
+        updatePartyDisplay();
+        try {
+          if (gameModes[selectedModeKey].map === "random-outbreak") {
+            partyForcedMapId = chooseOutbreakMapForLoading(Math.random());
+          } else {
+            partyForcedMapId = gameModes[selectedModeKey].map;
+          }
+          const result = await partyRequest("start", {
+            ...partySession, mode: selectedModeKey, mapId: partyForcedMapId,
+          });
+          updatePartyRoom(result.room);
+          startLoading();
+        } catch (error) {
+          setPartyStatus(error.message, true);
+        } finally {
+          partyStarting = false;
+          updatePartyDisplay();
+        }
+      }
+      function queuePartyAction(action) {
+        if (!isPartyGuest()) return;
+        partyOutgoingActions.push({ ...action, clientActionId: partyNextClientActionId++ });
+      }
+      async function pulseParty() {
+        if (!partySession || partyPulsePending) return;
+        partyPulsePending = true;
+        const actions = partyOutgoingActions.splice(0, 20);
+        try {
+          const result = await partyRequest("pulse", {
+            ...partySession,
+            state: ["playing", "paused"].includes(gameState) ? {
+              x: player.x, y: player.y, angle: player.angle,
+              hp: player.hp, maxHp: player.maxHp,
+              weaponId: selectedWeaponKey, papTier: weapon.papTier,
+              inSafeZone: Boolean(outbreakController?.inSafeZone),
+            } : null,
+            world: isPartyHost() ? createPartyWorld() : undefined,
+            actions: isPartyGuest() ? actions : undefined,
+            lastActionId: partyLastActionId,
+          });
+          updatePartyRoom(result.room);
+        } catch (error) {
+          partyOutgoingActions.unshift(...actions);
+          if (/Party not found|Party session expired/.test(error.message)) {
+            leaveParty();
+            if (gameState !== "menu") enterMainMenu();
+            setPartyStatus("Party closed or connection expired.", true);
+          } else if (gameState === "menu") setPartyStatus(error.message, true);
+        } finally {
+          partyPulsePending = false;
+        }
+      }
+      function createPartyWorld() {
+        if (!isPartyHost()) return null;
+        return {
+          state: gameState,
+          gameOverTitle: gameOverTitle.textContent,
+          mapId: isOutbreakMode() ? zarqwaConfig.id : "vr",
+          round, roundsCompleted, zombiesLeftInRound, zombiesToSpawn,
+          points, kills, powerOn,
+          roundLabel: roundLabel.textContent,
+          roundStatus: roundStatus.textContent,
+          objectiveName: objectiveNameElement.textContent,
+          objectiveProgress: objectiveProgressElement.textContent,
+          objectiveTransferWidth: objectiveTransferFill.style.width,
+          objectiveTransferHidden: objectiveTransferTrack.hidden,
+          extractionTime: extractionTimer.textContent,
+          warpText: warpCountdown.textContent,
+          warpHidden: warpCountdown.hidden,
+          zombies: zombies.map((zombie) => ({
+            x: zombie.x, y: zombie.y, radius: zombie.radius,
+            hp: zombie.hp, maxHp: zombie.maxHp, speed: zombie.speed,
+            category: zombie.category, objectiveTag: zombie.objectiveTag,
+            mangler: zombie.mangler, manglerVariant: zombie.manglerVariant,
+            aggro: zombie.aggro,
+          })),
+          bullets: bullets.map((bullet) => ({ ...bullet })),
+          remoteHealth: Object.fromEntries(partyRemoteHealth),
+          machines: blessingMachines.map((machine) => ({
+            id: machine.id, x: machine.x, y: machine.y, purchased: machine.purchased,
+          })),
+          packTier: weapon.papTier,
+          packCage: {
+            leftDoorOpen: packAPunchCage.leftDoorOpen,
+            rightDoorOpen: packAPunchCage.rightDoorOpen,
+          },
+          powerDoorOpen: powerCage.doorOpen,
+          controller: outbreakController ? {
+            region: outbreakController.region,
+            objective: outbreakController.objective,
+            contracts: outbreakController.contracts,
+            anomaly: outbreakController.anomaly,
+            inSafeZone: outbreakController.inSafeZone,
+            exteriorReturn: outbreakController.exteriorReturn,
+            perkSelections: outbreakController.perkSelections,
+            ammoCaches: outbreakController.ammoCaches,
+            activeExfils: outbreakController.activeExfils,
+            finalExfil: outbreakController.finalExfil,
+            extractionPhase: outbreakController.extractionPhase,
+            fieldPackAPunch: outbreakController.fieldPackAPunch,
+          } : null,
+        };
+      }
+      function applyPartyWorld(world) {
+        if (!isPartyGuest() || !world) return;
+        if (world.state === "gameover") {
+          if (["playing", "paused"].includes(gameState)) {
+            gameOverTitle.textContent = world.gameOverTitle || "GAME OVER";
+            endGame(performance.now());
+          }
+          return;
+        }
+        if (world.state !== "playing" && world.state !== "paused") return;
+        if (gameState === "loading") beginGame(performance.now());
+        if (!["playing", "paused"].includes(gameState)) return;
+        if (outbreakController && world.controller?.region !== outbreakController.region) {
+          partySpawnAligned = false;
+        }
+        if (world.mapId && world.mapId !== "vr" && zarqwaConfig.id !== world.mapId) {
+          activateOutbreakMap(world.mapId);
+          if (outbreakController) outbreakController.map = zarqwaConfig;
+          partySpawnAligned = false;
+        }
+        if (!partySpawnAligned) {
+          const leader = partyRoom.players.find((member) => member.id === partyRoom.hostId)?.state;
+          const slot = partyRoom.players.find((member) => member.id === partyRoom.selfId)?.slot || 2;
+          if (leader) {
+            player.x = leader.x + slot * 29;
+            player.y = leader.y + slot * 19;
+            if (isWorldPositionBlocked(player.x, player.y, player.radius)) {
+              player.x = leader.x;
+              player.y = leader.y;
+            }
+            partySpawnAligned = true;
+          }
+        }
+        const myHealth = world.remoteHealth?.[partyRoom.selfId];
+        if (Number.isFinite(myHealth)) player.hp = Math.max(0, myHealth);
+        round = world.round;
+        roundsCompleted = world.roundsCompleted;
+        zombiesLeftInRound = world.zombiesLeftInRound;
+        zombiesToSpawn = world.zombiesToSpawn;
+        points = world.points;
+        kills = world.kills;
+        powerOn = world.powerOn;
+        roundLabel.textContent = world.roundLabel;
+        roundElement.textContent = isExtractionMode() ? "01" : isOutbreakMode() ? world.controller?.region ?? round : round;
+        roundStatus.textContent = world.roundStatus;
+        zombies.splice(0, zombies.length, ...(world.zombies || []).map((zombie) => ({
+          ...zombie, path: [], pathIndex: 0, voice: null,
+        })));
+        bullets.splice(0, bullets.length, ...(world.bullets || []));
+        for (const remote of partyRemotePlayers.values()) {
+          if (Number.isFinite(world.remoteHealth?.[remote.id])) remote.hp = world.remoteHealth[remote.id];
+        }
+        for (const state of world.machines || []) {
+          const machine = blessingMachines.find((entry) => entry.id === state.id);
+          if (machine) Object.assign(machine, state);
+        }
+        applyOwnedBlessingState();
+        if (weapon.papTier !== world.packTier) {
+          weapon.papTier = world.packTier;
+          weapon.refillAmmo();
+        }
+        packAPunchCage.leftDoorOpen = world.packCage?.leftDoorOpen || false;
+        packAPunchCage.rightDoorOpen = world.packCage?.rightDoorOpen || false;
+        powerCage.doorOpen = world.powerDoorOpen || false;
+        if (outbreakController && world.controller) {
+          const wasSafe = outbreakController.inSafeZone;
+          Object.assign(outbreakController, world.controller);
+          if (wasSafe !== outbreakController.inSafeZone) {
+            if (outbreakController.inSafeZone) {
+              player.x = zarqwaConfig.safeZone.playerSpawn.x;
+              player.y = zarqwaConfig.safeZone.playerSpawn.y;
+            } else if (outbreakController.exteriorReturn) {
+              player.x = outbreakController.exteriorReturn.x;
+              player.y = outbreakController.exteriorReturn.y + 55;
+            }
+          }
+          outbreakController.updateHud();
+        }
+        objectiveNameElement.textContent = world.objectiveName;
+        objectiveProgressElement.textContent = world.objectiveProgress;
+        objectiveTransferFill.style.width = world.objectiveTransferWidth;
+        objectiveTransferTrack.hidden = world.objectiveTransferHidden;
+        extractionTimer.textContent = world.extractionTime;
+        warpCountdown.textContent = world.warpText;
+        warpCountdown.hidden = world.warpHidden;
+        rebuildWorldCollisionRectangles();
+        updatePointsHud();
+        updateHealthHud();
+        updateWeaponHud();
+        updatePartyDisplay();
+      }
+      function processPartyAction(action) {
+        if (!isPartyHost() || gameState !== "playing") return;
+        const member = partyRoom.players.find((entry) => entry.id === action.playerId);
+        if (!member?.state || (partyRemoteHealth.get(member.id) ?? member.state.hp) <= 0) return;
+        if (action.type === "fire") {
+          if (isOutbreakMode() && Boolean(member.state.inSafeZone) !== Boolean(outbreakController?.inSafeZone)) return;
+          const definition = weaponDefinitions[action.weaponId] || weaponDefinitions.aug;
+          const angle = action.angle;
+          const muzzleDistance = player.radius + 8;
+          bullets.push({
+            x: member.state.x + Math.cos(angle) * muzzleDistance,
+            y: member.state.y + Math.sin(angle) * muzzleDistance,
+            vx: Math.cos(angle) * 720,
+            vy: Math.sin(angle) * 720,
+            damage: definition.baseDamage * 2 ** Math.min(weapon.papTier, action.papTier),
+          });
+          if (isOutbreakMode()) {
+            zombies.forEach((zombie) => {
+              if (Math.hypot(zombie.x - member.state.x, zombie.y - member.state.y) < 600) zombie.aggro = true;
+            });
+          }
+        } else if (action.type === "interact") {
+          const previousX = player.x;
+          const previousY = player.y;
+          player.x = member.state.x;
+          player.y = member.state.y;
+          const interaction = getNearbyInteraction();
+          if (interaction && !partyLeaderOnlyInteractions.has(interaction.id)) interactWithWorld(performance.now());
+          player.x = previousX;
+          player.y = previousY;
+        }
+      }
+
       function enterMainMenu() {
+        if (gameState !== "boot" && partySession) leaveParty();
         if (outbreakController) outbreakController.cleanup();
         clearScorePresentation();
         closeTacMap();
@@ -3590,7 +4071,8 @@
       function startLoading(mapRandomValue = Math.random()) {
         if (gameState !== "menu") return;
         if (isOutbreakMode() && gameModes[selectedModeKey].map === "random-outbreak") {
-          chooseOutbreakMapForLoading(mapRandomValue);
+          if (partyForcedMapId) activateOutbreakMap(partyForcedMapId);
+          else chooseOutbreakMapForLoading(mapRandomValue);
         }
         gameState = "loading";
         loadingStartedAt = performance.now();
@@ -3741,6 +4223,8 @@
           updateWeaponHud(now);
         }
         if (isExtractionMode()) outbreakController?.startExtractionOperation(now);
+        partySpawnAligned = false;
+        updatePartyDisplay();
         requestAnimationFrame(() => {
           requestAnimationFrame(() => fadeOverlay.classList.remove("opaque"));
         });
@@ -4350,18 +4834,28 @@
           ),
         );
       }
-      function hasLineOfSightToPlayer(zombie) {
+      function getZombieTarget(zombie) {
+        const targets = [player, ...partyRemotePlayers.values()]
+          .filter((target) => target.hp > 0 &&
+            (!isOutbreakMode() || Boolean(target.inSafeZone) === Boolean(outbreakController?.inSafeZone)));
+        return targets.reduce((nearest, target) =>
+          !nearest || Math.hypot(zombie.x - target.x, zombie.y - target.y) < Math.hypot(zombie.x - nearest.x, zombie.y - nearest.y)
+            ? target : nearest, null) || player;
+      }
+      function hasLineOfSightToPlayer(zombie, target = player) {
         const halfViewWidth = canvas.width / (2 * CAMERA_ZOOM);
         const halfViewHeight = canvas.height / (2 * CAMERA_ZOOM);
         if (
-          Math.abs(zombie.x - player.x) > halfViewWidth + zombie.radius ||
-          Math.abs(zombie.y - player.y) > halfViewHeight + zombie.radius
+          !isPartyHost() && (
+            Math.abs(zombie.x - target.x) > halfViewWidth + zombie.radius ||
+            Math.abs(zombie.y - target.y) > halfViewHeight + zombie.radius
+          )
         ) {
           return false;
         }
         const sightPadding = 2;
         return !worldCollisionRectangles.some((rectangle) =>
-          segmentIntersectsArea(zombie.x, zombie.y, player.x, player.y, rectangle, sightPadding),
+          segmentIntersectsArea(zombie.x, zombie.y, target.x, target.y, rectangle, sightPadding),
         );
       }
       function getZombieVoiceVolume(distance) {
@@ -4407,8 +4901,9 @@
         zombie.voice = null;
       }
       function refreshZombiePath(zombie, now) {
-        let targetX = player.x;
-        let targetY = player.y;
+        const nearestPlayer = getZombieTarget(zombie);
+        let targetX = nearestPlayer.x;
+        let targetY = nearestPlayer.y;
         if (isOutbreakMode() && zombie.category === "ambient" && !zombie.aggro) {
           const random = outbreakController?.random || Math.random;
           const needsTarget = !zombie.wanderTarget || Math.hypot(zombie.wanderTarget.x - zombie.x, zombie.wanderTarget.y - zombie.y) < 18;
@@ -4446,7 +4941,8 @@
           return;
         }
         resolveWorldPenetration(zombie, zombie.radius);
-        const distanceToPlayer = Math.hypot(player.x - zombie.x, player.y - zombie.y);
+        const targetPlayer = getZombieTarget(zombie);
+        const distanceToPlayer = Math.hypot(targetPlayer.x - zombie.x, targetPlayer.y - zombie.y);
         if (isOutbreakMode() && zombie.category === "ambient" && !zombie.aggro) {
           if (
             outbreakController.forceAggro ||
@@ -4463,8 +4959,8 @@
         }
 
         const mayEngagePlayer = !isOutbreakMode() || zombie.category !== "ambient" || zombie.aggro;
-        const seesPlayer = mayEngagePlayer && hasLineOfSightToPlayer(zombie);
-        const isSprintingAtPlayer = seesPlayer && distanceToPlayer >= player.radius + zombie.radius;
+        const seesPlayer = mayEngagePlayer && hasLineOfSightToPlayer(zombie, targetPlayer);
+        const isSprintingAtPlayer = seesPlayer && distanceToPlayer >= targetPlayer.radius + zombie.radius;
         zombie.state = seesPlayer ? "engaged" : "pathing";
         if (isSprintingAtPlayer && now >= zombie.nextVoiceTickAt) {
           zombie.nextVoiceTickAt = now + ZOMBIE_AUDIO_TICK_INTERVAL;
@@ -4479,7 +4975,7 @@
         }
 
         let movementTarget = seesPlayer
-          ? player
+          ? targetPlayer
           : zombie.path[zombie.pathIndex];
         while (movementTarget && !seesPlayer) {
           const waypointDistance = Math.hypot(
@@ -5013,6 +5509,14 @@
         if (gameState !== "playing") return;
         const interaction = getNearbyInteraction();
         if (!interaction) return;
+        if (isPartyGuest()) {
+          if (partyLeaderOnlyInteractions.has(interaction.id)) {
+            setWeaponMessage("PARTY LEADER MUST USE THIS", now);
+            return;
+          }
+          queuePartyAction({ type: "interact" });
+          return;
+        }
         if (isOutbreakMode()) {
           interactWithOutbreak(now, interaction);
         } else if (interaction.id === "ammo") {
@@ -5058,13 +5562,19 @@
         updateWeaponHud(now);
         updateWorldInteractionPrompt();
       }
-      function damagePlayer(amount, now) {
-        if (gameState !== "playing" || player.hp <= 0) return;
+      function damagePlayer(amount, now, target = player) {
+        if (gameState !== "playing" || target.hp <= 0) return;
         if (debugFlags.god) return;
-        player.hp = Math.max(0, player.hp - amount);
+        target.hp = Math.max(0, target.hp - amount);
+        if (target !== player) {
+          partyRemoteHealth.set(target.id, target.hp);
+          partyRemoteLastDamageAt.set(target.id, now);
+          if (target.hp === 0 && player.hp === 0 && [...partyRemoteHealth.values()].every((hp) => hp <= 0)) endGame(now);
+          return;
+        }
         lastDamageAt = now;
         updateHealthHud();
-        if (player.hp === 0) endGame(now);
+        if (player.hp === 0 && (!isPartyHost() || [...partyRemoteHealth.values()].every((hp) => hp <= 0))) endGame(now);
       }
       function updateHealthRegeneration(now, deltaTime) {
         if (
@@ -5189,8 +5699,10 @@
           updatePointsHud();
         }
         if (debugFlags.infiniteAmmo) weapon.refillAmmo();
-        if (isOutbreakMode()) outbreakController?.update(now, deltaTime);
-        else updateRound(now);
+        if (!isPartyGuest()) {
+          if (isOutbreakMode()) outbreakController?.update(now, deltaTime);
+          else updateRound(now);
+        }
         weapon.update(now);
         let moveX = 0;
         let moveY = 0;
@@ -5198,7 +5710,8 @@
         if (keys.s || keys.arrowdown) moveY += 1;
         if (keys.a || keys.arrowleft) moveX -= 1;
         if (keys.d || keys.arrowright) moveX += 1;
-        const drivingTruck = isOutbreakMode() && outbreakController?.updateTruck(moveX, moveY, deltaTime, now);
+        if (player.hp <= 0) { moveX = 0; moveY = 0; }
+        const drivingTruck = !isPartyGuest() && isOutbreakMode() && outbreakController?.updateTruck(moveX, moveY, deltaTime, now);
         if (!drivingTruck && !beaconMenuOpen) movePlayerWithCollisions(moveX, moveY, deltaTime);
         const isMoving = !drivingTruck && (moveX !== 0 || moveY !== 0);
         if (isMoving && now >= nextFootstepAt) {
@@ -5214,16 +5727,22 @@
           aimTarget.x - player.x,
         );
 
+        if (isPartyGuest()) {
+          updateWorldInteractionPrompt();
+          return;
+        }
+
         for (let i = bullets.length - 1; i >= 0; i--) {
           const bullet = bullets[i];
           bullet.x += bullet.vx * deltaTime;
           bullet.y += bullet.vy * deltaTime;
           const halfViewWidth = canvas.width / (2 * CAMERA_ZOOM) + 40;
           const halfViewHeight = canvas.height / (2 * CAMERA_ZOOM) + 40;
-          if (
-            Math.abs(bullet.x - player.x) > halfViewWidth ||
-            Math.abs(bullet.y - player.y) > halfViewHeight
-          ) {
+          const nearPartyViewer = [player, ...partyRemotePlayers.values()].some((viewer) =>
+            Math.abs(bullet.x - viewer.x) <= halfViewWidth &&
+            Math.abs(bullet.y - viewer.y) <= halfViewHeight,
+          );
+          if (!nearPartyViewer) {
             bullets.splice(i, 1);
             continue;
           }
@@ -5250,12 +5769,14 @@
           if (isOutbreakMode() && outbreakController?.inSafeZone) break;
           const zombie = zombies[i];
           updateZombieNavigation(zombie, now, deltaTime);
+          const target = getZombieTarget(zombie);
           const distanceToPlayer = Math.hypot(
-            player.x - zombie.x,
-            player.y - zombie.y,
+            target.x - zombie.x,
+            target.y - zombie.y,
           );
           if (
-            distanceToPlayer < player.radius + zombie.radius &&
+            target.hp > 0 &&
+            distanceToPlayer < target.radius + zombie.radius &&
             now - zombie.lastAttackAt >= ZOMBIE_ATTACK_COOLDOWN
           ) {
             zombie.lastAttackAt = now;
@@ -5263,11 +5784,21 @@
             damagePlayer(
               getZombieDamage(isOutbreakMode() ? outbreakController.effectiveRound : round, isOutbreakMode() ? "outbreak" : "rbz"),
               now,
+              target,
             );
             if (gameState !== "playing") break;
           }
         }
         updateHealthRegeneration(now, deltaTime);
+        if (isPartyHost()) {
+          for (const remote of partyRemotePlayers.values()) {
+            const delay = blessingMachines.find((machine) => machine.id === "anarrosis")?.purchased
+              ? ANARROSIS_REGEN_DELAY : BASE_REGEN_DELAY;
+            if (remote.hp <= 0 || remote.hp >= remote.maxHp || now - (partyRemoteLastDamageAt.get(remote.id) ?? -Infinity) < delay) continue;
+            remote.hp = Math.min(remote.maxHp, remote.hp + REGEN_PER_SECOND * deltaTime);
+            partyRemoteHealth.set(remote.id, remote.hp);
+          }
+        }
         updateWorldInteractionPrompt();
       }
 
@@ -6128,6 +6659,14 @@
           const exfilColor = outbreakController.extractionPhase === "radiation" ? "#ff3c45" : "#29dff3";
           outbreakController.getActiveExtractionSites().forEach((exfil) => drawTacExfil(exfil, exfilColor));
         }
+        for (const remote of partyRemotePlayers.values()) {
+          if (Boolean(remote.inSafeZone) !== Boolean(outbreakController.inSafeZone)) continue;
+          const marker = worldToTac(remote);
+          tacMapContext.fillStyle = remote.hp > 0 ? "#52e9ff" : "#6a7479";
+          tacMapContext.beginPath();
+          tacMapContext.arc(marker.x, marker.y, 10, 0, Math.PI * 2);
+          tacMapContext.fill();
+        }
         const playerMarker = worldToTac(outbreakController.inSafeZone ? outbreakController.exteriorReturn : player);
         tacMapContext.save();
         tacMapContext.translate(playerMarker.x, playerMarker.y);
@@ -6208,6 +6747,13 @@
           const marker = worldToMiniMap(exfil);
           drawExfilSymbol(miniMapContext, marker.x, marker.y, 30, exfilColor);
         });
+        for (const remote of partyRemotePlayers.values()) {
+          const marker = worldToMiniMap(remote);
+          miniMapContext.fillStyle = remote.hp > 0 ? "#52e9ff" : "#6a7479";
+          miniMapContext.beginPath();
+          miniMapContext.arc(marker.x, marker.y, 6, 0, Math.PI * 2);
+          miniMapContext.fill();
+        }
 
         const playerMarker = worldToMiniMap(player);
         miniMapContext.save();
@@ -6443,6 +6989,25 @@
             ctx.fillStyle = zombieColor;
           }
         });
+        for (const remote of partyRemotePlayers.values()) {
+          if (isOutbreakMode() && Boolean(remote.inSafeZone) !== Boolean(outbreakController?.inSafeZone)) continue;
+          ctx.save();
+          ctx.translate(remote.x, remote.y);
+          ctx.rotate(remote.angle);
+          ctx.fillStyle = "#0b2229";
+          ctx.fillRect(0, -3, player.radius + 8, 6);
+          ctx.fillStyle = remote.hp > 0 ? "#4cdaf2" : "#52676e";
+          ctx.beginPath();
+          ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          ctx.save();
+          ctx.fillStyle = "#dffaff";
+          ctx.font = "800 12px Courier New";
+          ctx.textAlign = "center";
+          ctx.fillText(remote.name, remote.x, remote.y - 22);
+          ctx.restore();
+        }
         if (
           gameState === "playing" ||
           gameState === "paused" ||
@@ -6705,7 +7270,20 @@
         requestAnimationFrame(loop);
       }
 
-      playButton.addEventListener("click", startLoading);
+      playButton.addEventListener("click", startSelectedGame);
+      createPartyButton.addEventListener("click", createParty);
+      joinPartyButton.addEventListener("click", joinParty);
+      leavePartyButton.addEventListener("click", leaveParty);
+      copyPartyCodeButton.addEventListener("click", async () => {
+        if (!partySession) return;
+        try {
+          await navigator.clipboard.writeText(partySession.code);
+          setPartyStatus(`Copied party code ${partySession.code}`);
+        } catch {
+          partyCodeInput.select();
+          setPartyStatus("Party code selected · copy it to share.");
+        }
+      });
       resumeButton.addEventListener("click", () => resumeGame(performance.now()));
       quitButton.addEventListener("click", () => quitFromPause(performance.now()));
       modeButtons.forEach((button) => {
@@ -6754,7 +7332,7 @@
           event.preventDefault();
           return;
         }
-        if (gameState === "menu" && event.key === "Enter") startLoading();
+        if (gameState === "menu" && event.key === "Enter" && event.target?.tagName !== "INPUT") startSelectedGame();
         if (gameState === "playing" && !beaconMenuOpen && !event.repeat && key === "r") {
           weapon.beginReload(performance.now());
         }

@@ -193,6 +193,14 @@ const gameSource = inlineScripts.at(-1)[1] + `
   openTacMap,
   drawTacMap,
   drawMiniMap,
+  createPartyWorld,
+  applyPartyWorld,
+  processPartyAction,
+  updatePartyRoom,
+  getZombieTarget,
+  setPartyForTest(session, room) { partySession = session; partyRoom = room; },
+  get partyRemotePlayers() { return partyRemotePlayers; },
+  get partyOutgoingActions() { return partyOutgoingActions; },
   worldToTac,
   tacToWorld,
   closeTacMap,
@@ -1301,5 +1309,46 @@ for (const bp50Clip of ["shoot.wav", "reload.wav", "reload_tactical.wav"]) {
   assert.ok(fs.existsSync(`src/sfx/wn/ar/bp50/${bp50Clip}`));
   assert.ok(fs.existsSync(`dist/src/sfx/wn/ar/bp50/${bp50Clip}`));
 }
+
+game.selectGameMode("endless");
+game.state = "playing";
+game.resetGame(49000);
+const leaderId = "test-leader";
+const teammateId = "test-teammate";
+const teammateState = {
+  x: game.player.x + 200, y: game.player.y, angle: 0, hp: 150, maxHp: 150,
+  weaponId: "mtz556", papTier: 0, inSafeZone: false,
+};
+const partyRoom = {
+  code: "ABC234", name: "Test Squad", phase: "playing", hostId: leaderId, selfId: leaderId,
+  players: [
+    { id: leaderId, name: "Player 1", slot: 1, state: { x: game.player.x, y: game.player.y, angle: 0, hp: 150 } },
+    { id: teammateId, name: "Player 2", slot: 2, state: teammateState },
+  ],
+  actions: [],
+};
+game.setPartyForTest({ code: partyRoom.code, token: "test-token" }, partyRoom);
+game.updatePartyRoom(partyRoom);
+assert.equal(game.partyRemotePlayers.size, 1, "the shared match tracks a teammate avatar");
+const teammateThreat = game.createZombieAt(teammateState.x + 10, teammateState.y, 49001, { category: "round" });
+assert.equal(game.getZombieTarget(teammateThreat).id, teammateId, "zombies can target the nearest teammate");
+const bulletsBeforePartyShot = game.bullets.length;
+game.processPartyAction({ id: 1, playerId: teammateId, type: "fire", angle: 0, weaponId: "mtz556", papTier: 0 });
+assert.equal(game.bullets.length, bulletsBeforePartyShot + 1, "teammate shots enter the leader's authoritative bullet simulation");
+assert.equal(game.bullets.at(-1).damage, 928, "remote shots use the selected weapon's base damage");
+const authoritativeWorld = game.createPartyWorld();
+assert.equal(authoritativeWorld.zombies.length, game.zombies.length, "host broadcasts the shared enemy state");
+assert.equal(authoritativeWorld.points, game.points, "host broadcasts team points");
+assert.equal(authoritativeWorld.mapId, "vr", "the VR playlist shares its map identity");
+game.setPartyForTest({ code: partyRoom.code, token: "guest-token" }, { ...partyRoom, selfId: teammateId });
+const guestBulletsBefore = game.bullets.length;
+game.weapon.fireBullet(0);
+assert.equal(game.bullets.length, guestBulletsBefore, "guest bullets are not simulated independently");
+assert.equal(game.partyOutgoingActions.at(-1).type, "fire", "guest shots are queued for the leader");
+game.applyPartyWorld({ ...authoritativeWorld, points: 1234, remoteHealth: { [teammateId]: 100 } });
+assert.equal(game.points, 1234, "guests adopt the leader's shared points");
+assert.equal(game.player.hp, 100, "guests receive authoritative health from the leader");
+assert.doesNotThrow(() => game.draw(), "teammate avatars render in the shared game canvas");
+game.setPartyForTest(null, null);
 
 console.log("Outbreak and RBZ regression harness passed.");
