@@ -20,7 +20,7 @@ function makeContext2d() {
   const methods = [
     "clearRect", "fillRect", "strokeRect", "beginPath", "closePath", "moveTo",
     "lineTo", "arc", "fill", "stroke", "save", "restore", "translate", "scale",
-    "rotate", "drawImage", "setLineDash", "fillText", "strokeText", "clip",
+    "rotate", "drawImage", "setLineDash", "fillText", "strokeText", "clip", "ellipse",
   ];
   const context = { createRadialGradient: () => gradient };
   methods.forEach((method) => { context[method] = () => {}; });
@@ -87,7 +87,7 @@ class AudioStub {
   addEventListener(name, callback) { (this.listeners[name] ||= []).push(callback); }
   emit(name) { for (const callback of this.listeners[name] || []) callback(); }
 }
-class ImageStub { constructor() { this.complete = true; this.naturalWidth = 100; this.src = ""; } }
+class ImageStub { constructor() { this.complete = true; this.naturalWidth = 100; this.naturalHeight = 100; this.src = ""; } }
 
 let clock = 0;
 const sandbox = {

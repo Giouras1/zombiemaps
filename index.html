@@ -1739,6 +1739,8 @@
       dataHeistHardDriveImage.src = "src/assets/data-heist-hard-drive.png";
       const dataHeistUploadStationImage = new Image();
       dataHeistUploadStationImage.src = "src/assets/data-heist-upload-station.png";
+      const zombieSpriteSheetImage = new Image();
+      zombieSpriteSheetImage.src = "src/assets/zombie-sprite-sheet.png";
       const blessingImages = {};
       for (const [id, source] of Object.entries({
         hygeian: "src/assets/blessing-hygeian.png",
@@ -3883,6 +3885,7 @@
             hp: zombie.hp, maxHp: zombie.maxHp, speed: zombie.speed,
             category: zombie.category, objectiveTag: zombie.objectiveTag,
             mangler: zombie.mangler, manglerVariant: zombie.manglerVariant,
+            visualPhase: zombie.visualPhase,
             aggro: zombie.aggro,
           })),
           bullets: bullets.map((bullet) => ({ ...bullet })),
@@ -5040,6 +5043,7 @@
           aggro: options.aggro ?? !isOutbreakMode(),
           mangler: Boolean(options.mangler),
           manglerVariant: options.manglerVariant || null,
+          visualPhase: options.visualPhase ?? Math.random() * Math.PI * 2,
           lastProgressAt: now,
           lastProgressX: x,
           lastProgressY: y,
@@ -6912,6 +6916,64 @@
         tacMapOpen = false;
         tacMapScreen.hidden = true;
       }
+      function getZombieVisualMetrics(zombie) {
+        const isMangler = Boolean(zombie.mangler);
+        return {
+          width: isMangler ? 80 : 58,
+          height: isMangler ? 94 : 76,
+          top: -(isMangler ? 94 : 76) + zombie.radius,
+          shadowWidth: isMangler ? 49 : 31,
+          shadowHeight: isMangler ? 15 : 10,
+          spriteColumn: zombie.manglerVariant === "hvt" ? 2 : isMangler ? 1 : 0,
+        };
+      }
+      function drawZombieSprite(zombie, now) {
+        const visual = getZombieVisualMetrics(zombie);
+        const phase = Number.isFinite(zombie.visualPhase)
+          ? zombie.visualPhase
+          : ((zombie.x * 0.017 + zombie.y * 0.031) % (Math.PI * 2));
+        const moving = zombie.state === "engaged" || zombie.state === "pathing";
+        const bob = moving ? Math.sin(now / 105 + phase) * 1.7 : Math.sin(now / 330 + phase) * 0.65;
+        const sway = moving ? Math.sin(now / 170 + phase) * 0.035 : 0;
+
+        ctx.save();
+        ctx.translate(zombie.x, zombie.y);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
+        ctx.beginPath();
+        ctx.ellipse(0, zombie.radius * 0.72, visual.shadowWidth / 2, visual.shadowHeight / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (zombie.objectiveTag === "frenzy" || zombie.objectiveTag === "dataHeist") {
+          ctx.strokeStyle = zombie.objectiveTag === "frenzy" ? "rgba(255, 54, 66, .58)" : "rgba(242, 68, 154, .58)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(0, zombie.radius * 0.72, visual.shadowWidth * 0.62, visual.shadowHeight * 0.72, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.translate(0, bob);
+        ctx.rotate(sway);
+        if (zombieSpriteSheetImage.complete && zombieSpriteSheetImage.naturalWidth > 0) {
+          const cellWidth = zombieSpriteSheetImage.naturalWidth / 3;
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(
+            zombieSpriteSheetImage,
+            cellWidth * visual.spriteColumn,
+            0,
+            cellWidth,
+            zombieSpriteSheetImage.naturalHeight,
+            -visual.width / 2,
+            visual.top,
+            visual.width,
+            visual.height,
+          );
+        } else {
+          ctx.fillStyle = zombie.manglerVariant === "hvt" ? "#a92529" : zombie.mangler ? "#667078" : "#84906b";
+          ctx.beginPath();
+          ctx.arc(0, 0, zombie.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        return visual;
+      }
       function draw() {
         const now = performance.now();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -6943,50 +7005,33 @@
           ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
           ctx.fill();
         });
-        zombies.forEach((zombie) => {
-          const zombieColor = zombie.manglerVariant === "hvt"
-            ? "#ff7b24"
-            : zombie.manglerVariant === "wild"
-              ? "#9f6336"
-              : zombie.objectiveTag === "frenzy"
-                ? "#bd2833"
-                : zombie.objectiveTag === "dataHeist"
-                  ? "#b52d57"
-                  : "#e74c3c";
-          ctx.fillStyle = zombieColor;
-          ctx.beginPath();
-          ctx.arc(zombie.x, zombie.y, zombie.radius, 0, Math.PI * 2);
-          ctx.fill();
+        [...zombies].sort((first, second) => first.y - second.y).forEach((zombie) => {
+          const visual = drawZombieSprite(zombie, now);
           if (zombie.mangler) {
-            ctx.strokeStyle = zombie.manglerVariant === "hvt" ? "#ffd36a" : "#d29a68";
-            ctx.lineWidth = zombie.manglerVariant === "hvt" ? 4 : 2;
-            ctx.beginPath();
-            ctx.arc(zombie.x, zombie.y, zombie.radius + 4, 0, Math.PI * 2);
-            ctx.stroke();
             ctx.fillStyle = "#fff2ca";
             ctx.font = `900 ${zombie.manglerVariant === "hvt" ? 11 : 9}px Courier New`;
             ctx.textAlign = "center";
-            ctx.fillText(zombie.manglerVariant === "hvt" ? "HVT" : "WILD", zombie.x, zombie.y - zombie.radius - 13);
+            ctx.fillText(zombie.manglerVariant === "hvt" ? "HVT MANGLER" : "WILD MANGLER", zombie.x, zombie.y + visual.top - 9);
           }
           if (zombie.hp < zombie.maxHp) {
-            const barWidth = zombie.radius * 2.5;
-            const barHeight = 3;
+            const barWidth = zombie.mangler ? 48 : 34;
+            const barHeight = 4;
+            const barY = zombie.y + visual.top - (zombie.mangler ? 4 : 7);
             const healthRatio = Math.max(0, zombie.hp / zombie.maxHp);
             ctx.fillStyle = "rgba(0, 0, 0, 0.78)";
             ctx.fillRect(
               zombie.x - barWidth / 2,
-              zombie.y - zombie.radius - 8,
+              barY,
               barWidth,
               barHeight,
             );
-            ctx.fillStyle = "#d71920";
+            ctx.fillStyle = zombie.manglerVariant === "hvt" ? "#ff3540" : "#d71920";
             ctx.fillRect(
               zombie.x - barWidth / 2,
-              zombie.y - zombie.radius - 8,
+              barY,
               barWidth * healthRatio,
               barHeight,
             );
-            ctx.fillStyle = zombieColor;
           }
         });
         for (const remote of partyRemotePlayers.values()) {
