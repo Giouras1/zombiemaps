@@ -939,13 +939,7 @@
         letter-spacing: 0.05em;
       }
       #extractionContractCount {
-        max-width: 92px;
-        color: #ffd665;
-        font-size: 10px;
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        line-height: 1.15;
-        text-align: right;
+        display: none;
       }
       #miniMapHud.radiation .extractionClock {
         border-top-color: #ff3d45;
@@ -990,6 +984,36 @@
           opacity: 1;
           transform: translate(-50%, 0);
         }
+      }
+      #poiEntryBanner {
+        position: fixed;
+        top: 14%;
+        left: 50%;
+        z-index: 21;
+        width: min(760px, calc(100vw - 36px));
+        padding: 13px 22px;
+        border-top: 3px solid var(--poi-tier-color, #e7edf0);
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(5, 9, 11, 0.94) 14%,
+          rgba(5, 9, 11, 0.94) 86%,
+          transparent
+        );
+        color: #fff;
+        pointer-events: none;
+        transform: translateX(-50%);
+        font: 950 clamp(14px, 2vw, 22px)/1.2 "Courier New", monospace;
+        letter-spacing: 0.07em;
+        text-align: center;
+        text-shadow: 0 2px 5px #000;
+        animation: poiEntryIn 420ms cubic-bezier(0.16, 0.88, 0.24, 1) both;
+      }
+      #poiEntryBanner[data-tier="2"] { --poi-tier-color: #f28a32; }
+      #poiEntryBanner[data-tier="3"] { --poi-tier-color: #f13d46; }
+      @keyframes poiEntryIn {
+        from { opacity: 0; transform: translate(-50%, -16px) scaleX(0.72); }
+        to { opacity: 1; transform: translate(-50%, 0) scaleX(1); }
       }
 
       #objectiveHud {
@@ -1240,7 +1264,8 @@
       #objectiveHud[hidden],
       #warpCountdown[hidden],
       #miniMapHud[hidden],
-      #extractionWarning[hidden] {
+      #extractionWarning[hidden],
+      #poiEntryBanner[hidden] {
         display: none;
       }
       .tacMapFrame {
@@ -1909,12 +1934,13 @@
       <canvas id="miniMapCanvas" width="480" height="480"></canvas>
       <div class="extractionClock">
         <span id="extractionTimer">18:00</span>
-        <span id="extractionContractCount">3 CONTRACTS AVAILABLE</span>
+        <span id="extractionContractCount" hidden></span>
       </div>
     </div>
     <div id="extractionWarning" role="alert" hidden>
       WARNING! RADIATION DETECTED! EVACUATE THE ISLAND IMMEDIATELY!
     </div>
+    <div id="poiEntryBanner" role="status" aria-live="polite" hidden></div>
 
     <div id="objectiveHud" hidden>
       <div id="objectiveName">LOCATE THE MAIN OBJECTIVE</div>
@@ -2336,7 +2362,9 @@
       const extractionContractCount = document.getElementById(
         "extractionContractCount",
       );
+      extractionContractCount.hidden = true;
       const extractionWarning = document.getElementById("extractionWarning");
+      const poiEntryBanner = document.getElementById("poiEntryBanner");
       const objectiveHud = document.getElementById("objectiveHud");
       const objectiveNameElement = document.getElementById("objectiveName");
       const objectiveProgressElement =
@@ -2465,7 +2493,9 @@
       const EXTRACTION_OPERATION_DURATION = 18 * 60 * 1000;
       const EXTRACTION_RADIATION_DURATION = 3 * 60 * 1000;
       const EXTRACTION_CONTRACT_CHECK_INTERVAL = 90 * 1000;
-      const EXTRACTION_CONTRACT_TARGET = 3;
+      const EXTRACTION_CONTRACTS_PER_POI = 3;
+      const EXTRACTION_SUPER_SPRINTER_MIN_SPEED = 150;
+      const EXTRACTION_SUPER_SPRINTER_SPEED_RANGE = 22;
       const DATA_HEIST_UPLOAD_DURATION = 180000;
       const DATA_HEIST_WAVE_COUNT = 3;
       const DATA_HEIST_ZOMBIES_PER_WAVE = 25;
@@ -3458,6 +3488,7 @@
           this.extractionPhase = "inactive";
           this.operationEndsAt = 0;
           this.radiationEndsAt = 0;
+          this.currentDifficultyRegion = null;
           this.fieldPackAPunch = null;
           this.inSafeZone = false;
           this.exteriorReturn = null;
@@ -3484,9 +3515,12 @@
           this.previousSpawnId = null;
           this.deploymentGraceUntil = 0;
           this.regionMessageUntil = 0;
+          this.currentDifficultyRegion = null;
         }
         get effectiveRound() {
-          return this.region * 7;
+          return isExtractionMode()
+            ? getExtractionDifficultyAt(player.x, player.y).effectiveRound
+            : this.region * 7;
         }
         get objectiveReward() {
           return OUTBREAK_OBJECTIVE_REWARDS[
@@ -3517,24 +3551,32 @@
             null
           );
         }
-        addExtractionContract() {
-          if (
-            !isExtractionMode() ||
-            this.contracts.length >= EXTRACTION_CONTRACT_TARGET
-          )
-            return null;
+        addExtractionContract(preferredPoi = null) {
+          if (!isExtractionMode()) return null;
+          const poiIds = this.map.poiLabels.map((entry) => entry.poi);
+          const availablePoiIds = poiIds.filter(
+            (poi) =>
+              this.contracts.filter(
+                (contract) => contract.location?.poi === poi,
+              ).length < EXTRACTION_CONTRACTS_PER_POI,
+          );
+          const targetPoi =
+            preferredPoi && availablePoiIds.includes(preferredPoi)
+              ? preferredPoi
+              : this.pick(availablePoiIds);
+          if (!targetPoi) return null;
           const usedLocationIds = new Set(
             this.contracts.map((contract) => contract.location?.id),
           );
           let contract = null;
-          for (let attempt = 0; attempt < 16; attempt++) {
-            const candidate = this.buildObjective();
+          for (let attempt = 0; attempt < 32; attempt++) {
+            const candidate = this.buildObjective(targetPoi);
             if (!usedLocationIds.has(candidate.location?.id)) {
               contract = candidate;
               break;
             }
           }
-          contract ||= this.buildObjective();
+          contract ||= this.buildObjective(targetPoi);
           this.contracts.push(contract);
           return contract;
         }
@@ -3561,7 +3603,7 @@
           this.regionGeneration = 0;
           this.generateRegion(now, false);
         }
-        buildObjective() {
+        buildObjective(preferredPoi = null) {
           const types = ["hvt", "cargo", "frenzy", "dataHeist"];
           const type = this.forcedObjectiveType || this.pick(types);
           this.forcedObjectiveType = null;
@@ -3581,25 +3623,37 @@
                   ? DATA_HEIST_WAVE_COUNT * DATA_HEIST_ZOMBIES_PER_WAVE
                   : 1,
           };
+          const forPoi = (locations) => {
+            if (!preferredPoi) return locations;
+            const matches = locations.filter(
+              (location) => location.poi === preferredPoi,
+            );
+            return matches.length ? matches : locations;
+          };
           if (type === "hvt") {
-            const candidates = this.map.hvtLocations.filter(
+            const authoredLocations = forPoi(this.map.hvtLocations);
+            const candidates = authoredLocations.filter(
               (location) =>
                 Math.hypot(location.x - player.x, location.y - player.y) >= 260,
             );
             objective.location = this.pick(
-              candidates.length ? candidates : this.map.hvtLocations,
+              candidates.length ? candidates : authoredLocations,
             );
           } else if (type === "frenzy") {
-            const candidates = this.map.frenzyLocations.filter(
+            const authoredLocations = forPoi(this.map.frenzyLocations);
+            const candidates = authoredLocations.filter(
               (location) =>
                 Math.hypot(location.x - player.x, location.y - player.y) >= 260,
             );
             objective.location = this.pick(
-              candidates.length ? candidates : this.map.frenzyLocations,
+              candidates.length ? candidates : authoredLocations,
             );
           } else if (type === "dataHeist") {
+            const authoredLocations = forPoi(
+              this.map.dataHeistHardDriveLocations,
+            );
             const hardDriveCandidates =
-              this.map.dataHeistHardDriveLocations.filter(
+              authoredLocations.filter(
                 (location) =>
                   Math.hypot(location.x - player.x, location.y - player.y) >=
                   260,
@@ -3607,7 +3661,7 @@
             objective.hardDrive = this.pick(
               hardDriveCandidates.length
                 ? hardDriveCandidates
-                : this.map.dataHeistHardDriveLocations,
+                : authoredLocations,
             );
             objective.location = objective.hardDrive;
             objective.searchCenter = { ...objective.hardDrive.searchCenter };
@@ -3639,14 +3693,20 @@
             objective.nextSpawnAt = 0;
             objective.waveSpawned = Array(DATA_HEIST_WAVE_COUNT).fill(0);
           } else {
-            const routes = this.map.cargoRoutes.filter((route) => {
+            const authoredRoutes = this.map.cargoRoutes.filter((route) => {
+              const start = this.map.truckStarts.find(
+                (entry) => entry.id === route.startId,
+              );
+              return !preferredPoi || start?.poi === preferredPoi;
+            });
+            const routes = authoredRoutes.filter((route) => {
               const start = this.map.truckStarts.find(
                 (entry) => entry.id === route.startId,
               );
               return Math.hypot(start.x - player.x, start.y - player.y) >= 260;
             });
             objective.route = this.pick(
-              routes.length ? routes : this.map.cargoRoutes,
+              routes.length ? routes : authoredRoutes,
             );
             objective.location = this.map.truckStarts.find(
               (entry) => entry.id === objective.route.startId,
@@ -3656,6 +3716,7 @@
             );
             objective.truck = this.makeTruck(objective);
           }
+          objective.poi = objective.location?.poi || preferredPoi;
           return objective;
         }
         makeTruck(objective) {
@@ -3816,8 +3877,15 @@
           this.contracts = [];
           if (isExtractionMode()) {
             this.objective = null;
-            for (let index = 0; index < EXTRACTION_CONTRACT_TARGET; index++)
-              this.addExtractionContract();
+            for (const poi of this.map.poiLabels) {
+              for (
+                let index = 0;
+                index < EXTRACTION_CONTRACTS_PER_POI;
+                index++
+              ) {
+                this.addExtractionContract(poi.poi);
+              }
+            }
             const packCandidates = (this.map.packAPunchCandidates || []).filter(
               (candidate) =>
                 !this.isNearActiveCargoRoute(candidate, 110) &&
@@ -4413,16 +4481,20 @@
           }
           this.anomaly = null;
           if (isExtractionMode()) {
-            if (this.objective)
-              this.contracts = this.contracts.filter(
-                (contract) => contract !== this.objective,
+            const replacementPoi =
+              this.objective?.location?.poi ||
+              getExtractionDifficultyAt(player.x, player.y).poi;
+            const replacedContract =
+              this.objective ||
+              this.contracts.find(
+                (contract) => contract.location?.poi === replacementPoi,
               );
-            this.objective = this.buildObjective();
+            if (replacedContract)
+              this.contracts = this.contracts.filter(
+                (contract) => contract !== replacedContract,
+              );
+            this.objective = this.buildObjective(replacementPoi);
             this.contracts.unshift(this.objective);
-            this.contracts = this.contracts.slice(
-              0,
-              EXTRACTION_CONTRACT_TARGET,
-            );
           } else {
             this.exfil = null;
             this.exfilEndsAt = 0;
@@ -4433,7 +4505,7 @@
         }
         getObjectiveLabel() {
           if (isExtractionMode() && !this.objective)
-            return "CONTRACTS AVAILABLE";
+            return "";
           if (!this.objective) return "LOCATE THE MAIN OBJECTIVE";
           if (this.objective.state === "available")
             return "MAIN OBJECTIVE AVAILABLE";
@@ -4457,7 +4529,7 @@
         }
         getObjectiveProgress(now = performance.now()) {
           if (isExtractionMode() && !this.objective) {
-            return `${this.contracts.length} AVAILABLE · LOCATE A CONTRACT ON THE MAP`;
+            return "";
           }
           if (!this.objective) return "UNAVAILABLE";
           if (this.objective.state === "complete") {
@@ -4503,7 +4575,7 @@
             objectiveTransferTrack.hidden = true;
             return;
           }
-          objectiveHud.hidden = false;
+          objectiveHud.hidden = isExtractionMode() && !this.objective;
           objectiveNameElement.textContent = this.getObjectiveLabel();
           objectiveProgressElement.textContent = this.getObjectiveProgress(now);
           const showTransfer =
@@ -4513,9 +4585,12 @@
           objectiveTransferTrack.hidden = !showTransfer;
           objectiveTransferFill.style.width = `${showTransfer ? Math.floor(this.getDataHeistTransferProgress(now) * 100) : 0}%`;
           if (isExtractionMode()) this.updateExtractionHud(now);
-          tacMapRegion.textContent = isExtractionMode()
-            ? `EXTRACTION · THREAT ${this.effectiveRound}`
-            : `REGION ${this.region} · THREAT ${this.effectiveRound}`;
+          if (isExtractionMode()) {
+            const difficulty = getExtractionDifficultyAt(player.x, player.y);
+            tacMapRegion.textContent = `TIER ${getDifficultyTierRoman(difficulty.tier)} - ${difficulty.label}`;
+          } else {
+            tacMapRegion.textContent = `REGION ${this.region} · THREAT ${this.effectiveRound}`;
+          }
         }
         enterSafeZone() {
           if (!this.anomaly || this.inSafeZone) return false;
@@ -4570,6 +4645,16 @@
               : []
             : this.activeExfils;
         }
+        updateExtractionDifficulty(now, announce = true) {
+          if (!isExtractionMode()) return null;
+          const region = getExtractionDifficultyAt(player.x, player.y);
+          if (this.currentDifficultyRegion?.poi !== region.poi) {
+            this.currentDifficultyRegion = region;
+            if (announce) showPoiEntryAnnouncement(region, now);
+            this.updateHud(now);
+          }
+          return region;
+        }
         updateExtractionHud(now = performance.now()) {
           if (!isExtractionMode()) return;
           const deadline =
@@ -4581,7 +4666,6 @@
           const minutes = Math.floor(totalSeconds / 60);
           const seconds = totalSeconds % 60;
           extractionTimer.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-          extractionContractCount.textContent = `${this.contracts.length} CONTRACT${this.contracts.length === 1 ? "" : "S"} AVAILABLE`;
           miniMapHud.classList.toggle(
             "radiation",
             this.extractionPhase === "radiation",
@@ -4616,8 +4700,18 @@
             this.beginRadiation(now);
           while (now >= this.nextContractCheckAt) {
             this.nextContractCheckAt += EXTRACTION_CONTRACT_CHECK_INTERVAL;
-            if (this.contracts.length < EXTRACTION_CONTRACT_TARGET)
-              this.addExtractionContract();
+            for (const poi of this.map.poiLabels) {
+              const existing = this.contracts.filter(
+                (contract) => contract.location?.poi === poi.poi,
+              ).length;
+              for (
+                let index = existing;
+                index < EXTRACTION_CONTRACTS_PER_POI;
+                index++
+              ) {
+                this.addExtractionContract(poi.poi);
+              }
+            }
           }
           if (
             this.extractionPhase === "radiation" &&
@@ -4856,6 +4950,8 @@
           miniMapHud.hidden = true;
           miniMapHud.classList.remove("radiation");
           extractionWarning.hidden = true;
+          poiEntryBanner.hidden = true;
+          poiEntryBannerUntil = 0;
           closeBeaconMenu();
           closeTacMap();
           debugMenuOpen = false;
@@ -4891,6 +4987,7 @@
       let debugMenuOpen = false;
       let outbreakPreparedForLoading = false;
       let objectiveCompleteBannerUntil = 0;
+      let poiEntryBannerUntil = 0;
       let scoreFeedEntries = [];
       let nextScoreFeedId = 1;
       let partySession = null;
@@ -4927,6 +5024,51 @@
       }
       function isExtractionMode() {
         return gameModes[selectedModeKey]?.ruleset === "extraction";
+      }
+      function getExtractionDifficultyAt(x, y) {
+        const regions = zarqwaConfig?.difficultyRegions || [];
+        const containing = regions.find((region) =>
+          pointInPolygon(x, y, region.points),
+        );
+        if (containing) return containing;
+        const nearestPoi = (zarqwaConfig?.poiLabels || []).reduce(
+          (nearest, poi) => {
+            const distance = Math.hypot(x - poi.x, y - poi.y);
+            return !nearest || distance < nearest.distance
+              ? { poi, distance }
+              : nearest;
+          },
+          null,
+        );
+        return (
+          regions.find((region) => region.poi === nearestPoi?.poi.poi) || {
+            poi: "unknown",
+            label: "ASHIKA ISLAND",
+            tier: 1,
+            effectiveRound: 4,
+          }
+        );
+      }
+      function getDifficultyTierRoman(tier) {
+        return ["", "I", "II", "III"][tier] || String(tier);
+      }
+      function getPoiDisplayLabel(label) {
+        return String(label || "")
+          .toLowerCase()
+          .replace(/\b\w/g, (letter) => letter.toUpperCase());
+      }
+      function showPoiEntryAnnouncement(region, now) {
+        if (!region || !isExtractionMode()) return;
+        poiEntryBanner.dataset.tier = String(region.tier);
+        poiEntryBanner.textContent = `(${getDifficultyTierRoman(region.tier)}) ENTERING NEW DIFFICULTY REGION - ${getPoiDisplayLabel(region.label)}`;
+        poiEntryBanner.hidden = false;
+        poiEntryBannerUntil = now + 3300;
+      }
+      function updatePoiEntryAnnouncement(now) {
+        if (poiEntryBannerUntil && now >= poiEntryBannerUntil) {
+          poiEntryBannerUntil = 0;
+          poiEntryBanner.hidden = true;
+        }
       }
       function isPartyHost() {
         return Boolean(partySession && partyRoom?.selfId === partyRoom?.hostId);
@@ -4997,9 +5139,13 @@
         gameHud.hidden = !isVisible;
         blessingHud.hidden = !isVisible;
         weaponHud.hidden = !isVisible;
-        roundUi.hidden = !isVisible || isExtractionMode();
+        roundUi.hidden = !isVisible || isOutbreakMode();
         miniMapHud.hidden = !isVisible || !isExtractionMode();
-        if (!isVisible || !isExtractionMode()) extractionWarning.hidden = true;
+        if (!isVisible || !isExtractionMode()) {
+          extractionWarning.hidden = true;
+          poiEntryBanner.hidden = true;
+          poiEntryBannerUntil = 0;
+        }
         objectiveHud.hidden = !isVisible || !isOutbreakMode();
         if (!isVisible) interactPrompt.hidden = true;
         partyHud.hidden = !isVisible || !partySession;
@@ -5472,6 +5618,9 @@
             objectiveTag: zombie.objectiveTag,
             mangler: zombie.mangler,
             manglerVariant: zombie.manglerVariant,
+            difficultyRound: zombie.difficultyRound,
+            difficultyTier: zombie.difficultyTier,
+            superSprinter: zombie.superSprinter,
             visualPhase: zombie.visualPhase,
             aggro: zombie.aggro,
           })),
@@ -6850,10 +6999,20 @@
         }
       }
       function createZombieAt(x, y, now = performance.now(), options = {}) {
+        const extractionDifficulty = isExtractionMode()
+          ? getExtractionDifficultyAt(x, y)
+          : null;
         const scalingRound =
-          isOutbreakMode() && outbreakController
+          extractionDifficulty?.effectiveRound ??
+          (isOutbreakMode() && outbreakController
             ? outbreakController.effectiveRound
-            : Math.min(round, ZOMBIE_HEALTH_CAP_ROUND);
+            : Math.min(round, ZOMBIE_HEALTH_CAP_ROUND));
+        const speedRandom =
+          isOutbreakMode() && outbreakController
+            ? outbreakController.random()
+            : Math.random();
+        const isSuperSprinter =
+          extractionDifficulty?.tier === 3 && !options.mangler;
         const zombieHealth = options.hp ?? getZombieHealth(scalingRound);
         const zombie = {
           x,
@@ -6861,12 +7020,10 @@
           radius: options.radius ?? player.radius,
           speed:
             options.speed ??
-            getZombieSpeed(
-              scalingRound,
-              isOutbreakMode() && outbreakController
-                ? outbreakController.random()
-                : Math.random(),
-            ),
+            (isSuperSprinter
+              ? EXTRACTION_SUPER_SPRINTER_MIN_SPEED +
+                speedRandom * EXTRACTION_SUPER_SPRINTER_SPEED_RANGE
+              : getZombieSpeed(scalingRound, speedRandom)),
           hp: zombieHealth,
           maxHp: zombieHealth,
           lastAttackAt: -Infinity,
@@ -6887,6 +7044,9 @@
           aggro: options.aggro ?? !isOutbreakMode(),
           mangler: Boolean(options.mangler),
           manglerVariant: options.manglerVariant || null,
+          difficultyRound: scalingRound,
+          difficultyTier: extractionDifficulty?.tier || null,
+          superSprinter: isSuperSprinter,
           visualPhase: options.visualPhase ?? Math.random() * Math.PI * 2,
           lastProgressAt: now,
           lastProgressX: x,
@@ -7647,6 +7807,7 @@
       function updateGame(now, deltaTime) {
         updateScoreFeed(now);
         updateObjectiveCompletePresentation(now);
+        updatePoiEntryAnnouncement(now);
         if (debugFlags.infinitePoints) {
           points = Math.max(points, 999999);
           updatePointsHud();
@@ -7687,6 +7848,9 @@
           aimTarget.x - player.x,
         );
 
+        if (isExtractionMode())
+          outbreakController?.updateExtractionDifficulty(now);
+
         if (isPartyGuest()) {
           updateWorldInteractionPrompt();
           return;
@@ -7709,11 +7873,12 @@
           }
           for (let j = zombies.length - 1; j >= 0; j--) {
             const zombie = zombies[j];
+            const hitbox = getZombieVisualMetrics(zombie);
             const distance = Math.hypot(
               bullet.x - zombie.x,
-              bullet.y - zombie.y,
+              bullet.y - (zombie.y + hitbox.hitboxOffsetY),
             );
-            if (distance < zombie.radius + 3) {
+            if (distance < hitbox.hitboxRadius + 3) {
               zombie.hp -= bullet.damage;
               bullets.splice(i, 1);
               if (zombie.hp <= 0) {
@@ -7744,7 +7909,11 @@
             playZombieAttackSound(distanceToPlayer);
             damagePlayer(
               getZombieDamage(
-                isOutbreakMode() ? outbreakController.effectiveRound : round,
+                isExtractionMode()
+                  ? zombie.difficultyRound
+                  : isOutbreakMode()
+                    ? outbreakController.effectiveRound
+                    : round,
                 isOutbreakMode() ? "outbreak" : "rbz",
               ),
               now,
@@ -8099,7 +8268,53 @@
         for (const cover of zarqwaConfig.coverAreas) {
           drawAuthoredArea(target, cover, "#5e4c35", "#b89862", 3);
         }
+        if (isExtractionMode() && target === ctx && !tacMap) {
+          const difficulty = getExtractionDifficultyAt(player.x, player.y);
+          if (difficulty.tier > 1) {
+            const lighting = target.createLinearGradient(
+              bounds.x + bounds.width,
+              bounds.y,
+              bounds.x,
+              bounds.y + bounds.height,
+            );
+            lighting.addColorStop(
+              0,
+              difficulty.tier === 3
+                ? "rgba(192, 18, 25, .29)"
+                : "rgba(232, 112, 30, .22)",
+            );
+            lighting.addColorStop(
+              0.46,
+              difficulty.tier === 3
+                ? "rgba(124, 8, 17, .14)"
+                : "rgba(171, 72, 18, .09)",
+            );
+            lighting.addColorStop(1, "rgba(0, 0, 0, .08)");
+            target.fillStyle = lighting;
+            target.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+          }
+        }
         target.restore();
+        if (
+          isExtractionMode() &&
+          target === tacMapContext &&
+          zarqwaConfig.difficultyRegions?.length
+        ) {
+          for (const region of zarqwaConfig.difficultyRegions) {
+            if (region.tier === 1) continue;
+            drawPolygon(
+              target,
+              region.points,
+              region.tier === 3
+                ? "rgba(213, 28, 38, .25)"
+                : "rgba(240, 130, 42, .21)",
+              region.tier === 3
+                ? "rgba(255, 75, 82, .78)"
+                : "rgba(255, 174, 77, .72)",
+              tacMap ? 8 : 3,
+            );
+          }
+        }
         if (zarqwaConfig.poiLabels?.length) {
           target.save();
           target.textAlign = "center";
@@ -9277,10 +9492,15 @@
       }
       function getZombieVisualMetrics(zombie) {
         const isMangler = Boolean(zombie.mangler);
+        const width = isMangler ? 80 : 58;
+        const height = isMangler ? 94 : 76;
+        const top = -height + zombie.radius;
         return {
-          width: isMangler ? 80 : 58,
-          height: isMangler ? 94 : 76,
-          top: -(isMangler ? 94 : 76) + zombie.radius,
+          width,
+          height,
+          top,
+          hitboxOffsetY: top + height * 0.5,
+          hitboxRadius: isMangler ? 22 : 16,
           shadowWidth: isMangler ? 49 : 31,
           shadowHeight: isMangler ? 15 : 10,
           spriteColumn: zombie.manglerVariant === "hvt" ? 2 : isMangler ? 1 : 0,

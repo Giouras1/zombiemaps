@@ -22,7 +22,10 @@ function makeContext2d() {
     "lineTo", "arc", "fill", "stroke", "save", "restore", "translate", "scale",
     "rotate", "drawImage", "setLineDash", "fillText", "strokeText", "clip", "ellipse",
   ];
-  const context = { createRadialGradient: () => gradient };
+  const context = {
+    createRadialGradient: () => gradient,
+    createLinearGradient: () => gradient,
+  };
   methods.forEach((method) => { context[method] = () => {}; });
   return context;
 }
@@ -68,7 +71,7 @@ const ids = [
   "objectiveHud", "objectiveName", "objectiveProgress", "objectiveTransferTrack", "objectiveTransferFill",
   "objectiveCompleteBanner", "objectiveCompleteSubtext", "scoreFeed", "warpCountdown", "tacMapScreen",
   "tacMapCanvas", "tacMapTitle", "tacMapRegion", "miniMapHud", "miniMapCanvas", "extractionTimer",
-  "extractionContractCount", "extractionWarning", "beaconMenu", "beaconDescription", "beaconPrimary",
+  "extractionContractCount", "extractionWarning", "poiEntryBanner", "beaconMenu", "beaconDescription", "beaconPrimary",
   "beaconCancel", "debugMenu", "debugReadout", "damageVignette", "gameOverTitle",
   "debugRegionInput", "debugTeleportSelect",
   "finalKills", "finalRounds", "leaderboardBody", "returnMessage", "fadeOverlay",
@@ -179,6 +182,8 @@ const gameSource = inlineScripts.at(-1)[1] + `
   getZombieVoiceVolume,
   getHvtManglerHealth,
   getWildManglerHealth,
+  getExtractionDifficultyAt,
+  getZombieVisualMetrics,
   validateAuthoredZarqwaPositions,
   isWorldPositionBlocked,
   isZarqwaWaterBlocked,
@@ -431,6 +436,15 @@ for (const weaponKey of ["aug", "mtz556", "bp50"]) {
 game.selectWeapon("aug");
 assert.equal(mangler.manglerVariant, "hvt", "HVT Manglers retain a distinct boss identity");
 assert.ok(game.getHvtManglerHealth(2) > game.getHvtManglerHealth(1), "HVT health follows effective-round progression");
+const spriteHitboxOffsets = [
+  game.getZombieVisualMetrics({ radius: 12, mangler: false, manglerVariant: null }).hitboxOffsetY,
+  game.getZombieVisualMetrics({ radius: 20, mangler: true, manglerVariant: "wild" }).hitboxOffsetY,
+  game.getZombieVisualMetrics({ radius: 20, mangler: true, manglerVariant: "hvt" }).hitboxOffsetY,
+];
+assert.ok(
+  Math.max(...spriteHitboxOffsets) - Math.min(...spriteHitboxOffsets) <= 1,
+  "normal, wild Mangler, and HVT sprite hitboxes share the same body-center alignment",
+);
 const nonHvtMangler = game.createZombieAt(mangler.x + 60, mangler.y, 7001, {
   category: "ambient", mangler: true, manglerVariant: "wild", hp: 3500,
 });
@@ -921,6 +935,15 @@ assert.equal(sandbox.ASHIKA_CONFIG.cargoRoutes.length, 7, "Ashika has seven auth
 assert.equal(sandbox.ASHIKA_CONFIG.exfilLocations.length, 7, "Ashika has one exfil site in every POI");
 assert.equal(sandbox.ASHIKA_CONFIG.finalExfilLocations.length, 3, "Ashika has exactly three authored radiation exfils");
 assert.equal(sandbox.ASHIKA_CONFIG.packAPunchCandidates.length, 7, "Ashika has one outdoor Pack-a-Punch candidate in every POI");
+assert.deepEqual(
+  Array.from(sandbox.ASHIKA_CONFIG.difficultyRegions, (region) => [region.poi, region.tier, region.effectiveRound]),
+  [
+    ["oganikku-farms", 1, 4], ["residential", 1, 4], ["shipwreck", 1, 4],
+    ["town-center", 2, 16], ["beach-club", 2, 16],
+    ["tsuki-castle", 3, 45], ["port-ashika", 3, 45],
+  ],
+  "Ashika difficulty regions use the authored Tier I/II/III round equivalents",
+);
 for (const [category, locations] of Object.entries({
   ambient: sandbox.ASHIKA_CONFIG.ambientNodes,
   hvt: sandbox.ASHIKA_CONFIG.hvtLocations,
@@ -952,7 +975,14 @@ assert.equal(game.controller.ambientCount(), 30, "Ashika populates the standard 
 clock = ashikaLoadingStartedAt + 5001;
 game.updateLoading(clock);
 assert.equal(game.state, "playing", "Ashika enters the extraction operation after loading");
-assert.equal(game.controller.contracts.length, 3, "three contracts are available at infil");
+assert.equal(game.controller.contracts.length, 21, "three contracts per POI are available at infil");
+for (const poi of sandbox.ASHIKA_CONFIG.poiLabels) {
+  assert.equal(
+    game.controller.contracts.filter((contract) => contract.location.poi === poi.poi).length,
+    3,
+    `${poi.label} starts with exactly three contracts`,
+  );
+}
 assert.equal(game.controller.objective, null, "Ashika does not force a single Outbreak objective at infil");
 assert.equal(game.controller.activeExfils.length, 2, "two blue exfils are selected on every infil");
 assert.equal(new Set(game.controller.activeExfils.map((site) => site.id)).size, 2, "infil exfils never duplicate");
@@ -961,9 +991,33 @@ assert.equal(game.controller.operationEndsAt - clock, 18 * 60 * 1000, "the initi
 assert.equal(elements.get("extractionTimer").textContent, "18:00", "the minimap starts with an 18:00 clock");
 assert.equal(elements.get("miniMapHud").hidden, false, "the square minimap is visible during Ashika extraction");
 assert.equal(elements.get("roundUi").hidden, true, "the Outbreak Region counter is removed from the top right");
+assert.equal(elements.get("objectiveHud").hidden, true, "no generic contracts-available message is shown");
+assert.equal(elements.get("extractionContractCount").hidden, true, "the minimap omits the contract counter");
 assert.ok(game.controller.fieldPackAPunch, "one outdoor Pack-a-Punch is selected at infil");
 assert.ok(sandbox.ASHIKA_CONFIG.packAPunchCandidates.includes(game.controller.fieldPackAPunch), "the Pack-a-Punch uses an authored valid site");
 assert.doesNotThrow(() => game.drawMiniMap(), "the live Ashika minimap renders contracts, exfils, and the player");
+
+const tierSamples = [
+  { poi: "oganikku-farms", x: -1740, y: -1760, tier: 1, round: 4 },
+  { poi: "beach-club", x: -1320, y: 1780, tier: 2, round: 16 },
+  { poi: "tsuki-castle", x: 260, y: -120, tier: 3, round: 45 },
+];
+for (const sample of tierSamples) {
+  const difficulty = game.getExtractionDifficultyAt(sample.x, sample.y);
+  assert.equal(difficulty.poi, sample.poi, `${sample.poi} resolves to its authored region`);
+  assert.equal(difficulty.tier, sample.tier, `${sample.poi} uses Tier ${sample.tier}`);
+  const tierZombie = game.createZombieAt(sample.x, sample.y, clock, { category: "ambient" });
+  assert.equal(tierZombie.difficultyRound, sample.round, `${sample.poi} zombies use round ${sample.round} scaling`);
+  assert.equal(tierZombie.hp, game.getZombieHealth(sample.round), `${sample.poi} health follows its tier round`);
+  assert.equal(tierZombie.superSprinter, sample.tier === 3, "only Tier III creates supersprinters");
+  if (sample.tier === 3) assert.ok(tierZombie.speed >= 150, "Tier III supersprinters receive supersprint speed");
+  game.zombies.splice(game.zombies.indexOf(tierZombie), 1);
+}
+game.player.x = -1320;
+game.player.y = 1780;
+game.controller.updateExtractionDifficulty(clock + 1);
+assert.match(elements.get("poiEntryBanner").textContent, /^\(II\) ENTERING NEW DIFFICULTY REGION - Beach Club$/, "entering a new POI announces its difficulty tier and name");
+assert.equal(elements.get("poiEntryBanner").hidden, false, "the POI difficulty announcement is visible briefly");
 
 let debugNow = clock + 10;
 for (const [debugAction, expectedType] of [
@@ -980,6 +1034,7 @@ const ashikaHvt = game.zombies.find((zombie) => zombie.manglerVariant === "hvt")
 assert.equal(ashikaHvt?.hp, game.weapon.baseDamage * 60, "Ashika HVT Manglers take 60 bullets from an un-Packed base weapon");
 game.handleDebugAction("forceDataHeist", debugNow++);
 const contractsBeforePayment = game.controller.contracts.length;
+const completedContractPoi = game.controller.objective.location.poi;
 assert.equal(game.controller.completeObjective(debugNow++, true), true, "an Ashika contract completes through the generic controller");
 assert.equal(game.controller.contracts.length, contractsBeforePayment - 1, "completed contracts leave a vacancy until the population check");
 assert.equal(game.controller.anomaly, null, "Ashika contract completion does not activate the Outbreak Anomaly flow");
@@ -988,8 +1043,13 @@ assert.equal(elements.get("objectiveCompleteSubtext").textContent, "CONTRACT PAY
 const contractCheckAt = game.controller.nextContractCheckAt;
 game.controller.update(contractCheckAt, 0);
 clock = contractCheckAt;
-assert.equal(game.controller.contracts.length, 3, "the 90-second contract check replenishes one missing contract");
-assert.equal(elements.get("extractionContractCount").textContent, "3 CONTRACTS AVAILABLE", "the minimap reports the current contract population");
+assert.equal(game.controller.contracts.length, 21, "the 90-second contract check replenishes the missing POI contract");
+assert.equal(
+  game.controller.contracts.filter((contract) => contract.location.poi === completedContractPoi).length,
+  3,
+  "the vacancy is replenished in the POI where the contract was completed",
+);
+assert.equal(elements.get("extractionContractCount").textContent, "", "the minimap does not display a contracts-available counter");
 
 game.player.x = game.controller.fieldPackAPunch.x;
 game.player.y = game.controller.fieldPackAPunch.y;

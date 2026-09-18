@@ -48,6 +48,37 @@
     }[entry.poi],
   }));
 
+  const difficultyRegions = [
+    {
+      poi: "oganikku-farms", label: "OGANIKKU FARMS", tier: 1, effectiveRound: 4,
+      points: [[-2490, -2750], [-700, -2700], [-700, -1080], [-980, -900], [-2640, -900], [-2710, -1370]],
+    },
+    {
+      poi: "residential", label: "RESIDENTIAL", tier: 1, effectiveRound: 4,
+      points: [[-700, -2700], [1120, -2670], [2050, -2350], [2690, -1260], [2350, -1050], [1600, -1030], [980, -1030], [-700, -1080]],
+    },
+    {
+      poi: "shipwreck", label: "SHIPWRECK", tier: 1, effectiveRound: 4,
+      points: [[1600, -1030], [2350, -1050], [2690, -1260], [2700, -650], [2580, -80], [2520, 620], [2300, 940], [1540, 760], [1450, 160], [1500, -420]],
+    },
+    {
+      poi: "town-center", label: "TOWN CENTER", tier: 2, effectiveRound: 16,
+      points: [[-2640, -900], [-980, -900], [-1080, 420], [-850, 880], [-2320, 940], [-2320, 470], [-2670, 210], [-2790, -480]],
+    },
+    {
+      poi: "beach-club", label: "BEACH CLUB", tier: 2, effectiveRound: 16,
+      points: [[-2320, 940], [-850, 880], [-480, 1180], [300, 2500], [-790, 2570], [-1530, 2520], [-2100, 2320], [-2310, 1820], [-2160, 1270]],
+    },
+    {
+      poi: "tsuki-castle", label: "TSUKI CASTLE", tier: 3, effectiveRound: 45,
+      points: [[-980, -850], [-700, -1080], [980, -1030], [1600, -1030], [1500, -420], [1450, 160], [1540, 760], [700, 820], [-480, 900], [-850, 880], [-1080, 420]],
+    },
+    {
+      poi: "port-ashika", label: "PORT ASHIKA", tier: 3, effectiveRound: 45,
+      points: [[-480, 900], [700, 820], [1540, 760], [2300, 940], [2410, 1390], [2200, 1940], [1880, 2320], [1320, 2700], [620, 2790], [300, 2500]],
+    },
+  ];
+
   const ambientNodes = [
     point("ashika-ambient-farms-01", -2260, -1940, "oganikku-farms"),
     point("ashika-ambient-farms-02", -2030, -1520, "oganikku-farms"),
@@ -130,6 +161,7 @@
       waterStroke: "#62a8b6",
     },
     bounds: { x: -3000, y: -3000, width: 6000, height: 6000 },
+    difficultyRegions,
     boundary: [
       [-2490, -2750], [-1860, -2920], [-1080, -2880], [-520, -2700],
       [240, -2750], [1120, -2670], [2050, -2350], [2470, -1900],
@@ -283,7 +315,7 @@
       point("ashika-frenzy-castle-north", 660, -880, "tsuki-castle"),
       point("ashika-frenzy-castle-south", 140, 720, "tsuki-castle"),
       point("ashika-frenzy-residential-north", 1300, -2390, "residential"),
-      point("ashika-frenzy-residential-south", 1280, -920, "residential"),
+      point("ashika-frenzy-residential-south", 1280, -1120, "residential"),
       point("ashika-frenzy-shipwreck-north", 2350, -980, "shipwreck"),
       point("ashika-frenzy-shipwreck-south", 2070, 660, "shipwreck"),
       point("ashika-frenzy-port-west", 420, 1500, "port-ashika"),
@@ -431,6 +463,10 @@
     if (!candidate || candidate.id !== "ashika-island") throw new Error("Ashika config id is invalid");
     if (candidate.bounds.width !== 6000 || candidate.bounds.height !== 6000) throw new Error("Ashika must remain a 6000 x 6000 extraction map");
     if (candidate.poiLabels.length !== 7) throw new Error("Ashika must include all seven named POIs");
+    if (candidate.difficultyRegions.length !== 7) throw new Error("Ashika must include seven difficulty regions");
+    if (candidate.difficultyRegions.filter((region) => region.tier === 1 && region.effectiveRound === 4).length !== 3) throw new Error("Ashika Tier I must contain three round-4 POIs");
+    if (candidate.difficultyRegions.filter((region) => region.tier === 2 && region.effectiveRound === 16).length !== 2) throw new Error("Ashika Tier II must contain two round-16 POIs");
+    if (candidate.difficultyRegions.filter((region) => region.tier === 3 && region.effectiveRound === 45).length !== 2) throw new Error("Ashika Tier III must contain two round-45 POIs");
     if (candidate.ambientNodes.length < 56) throw new Error("Ashika needs at least eight ambient nodes per POI");
     for (const key of ["hvtLocations", "frenzyLocations", "dataHeistHardDriveLocations", "dataHeistUploadStations", "ammoCacheCandidates"]) {
       if (candidate[key].length < 14) throw new Error(`Ashika ${key} does not cover every POI densely enough`);
@@ -451,6 +487,18 @@
     ].flat();
     const invalid = gameplayPoints.filter((entry) => !pointInPolygon(entry.x, entry.y, candidate.boundary));
     if (invalid.length) throw new Error(`Ashika locations outside the island: ${invalid.map((entry) => entry.id).join(", ")}`);
+    const difficultyPoints = [
+      candidate.ambientNodes, candidate.hvtLocations,
+      candidate.frenzyLocations, candidate.dataHeistHardDriveLocations,
+      candidate.dataHeistUploadStations, candidate.truckStarts,
+    ].flat();
+    const wrongDifficulty = difficultyPoints.filter((entry) => {
+      const expected = candidate.difficultyRegions.find((region) => region.poi === entry.poi);
+      if (!expected) return false;
+      const assigned = candidate.difficultyRegions.find((region) => pointInPolygon(entry.x, entry.y, region.points));
+      return !assigned || assigned.tier !== expected.tier || assigned.effectiveRound !== expected.effectiveRound;
+    });
+    if (wrongDifficulty.length) throw new Error(`Ashika locations assigned to the wrong difficulty: ${wrongDifficulty.map((entry) => entry.id).join(", ")}`);
     const duplicateIds = gameplayPoints.map((entry) => entry.id).filter((id, index, ids) => ids.indexOf(id) !== index);
     if (duplicateIds.length) throw new Error(`Duplicate Ashika location ids: ${duplicateIds.join(", ")}`);
     return true;
